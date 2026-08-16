@@ -1,0 +1,84 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Category {
+  id           String    @id @default(cuid())
+  name         String
+  displayOrder Int       @default(0)
+  active       Boolean   @default(true)
+  products     Product[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model Product {
+  id          String      @id @default(cuid())
+  name        String
+  description String?
+  price       Float
+  image       String?
+  available   Boolean     @default(true)
+  categoryId  String
+  category    Category    @relation(fields: [categoryId], references: [id])
+  orderItems  OrderItem[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  orderNumber     String      @unique
+  customerName    String
+  customerPhone   String
+  customerAddress String?
+  orderType       String      @default("DELIVERY") // DELIVERY | PICKUP
+  status          String      @default("PENDING")  // PENDING | CONFIRMED | PREPARING | READY | COMPLETED | CANCELLED
+  subtotal        Float
+  deliveryFee     Float       @default(0)
+  total           Float
+  notes           String?
+  items           OrderItem[]
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+model OrderItem {
+  id          String   @id @default(cuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productName String
+  price       Float
+  quantity    Int      @default(1)
+}
+
+model RestaurantSettings {
+  id             String        @id @default("default")
+  name           String        @default("Le Gourmet")
+  phone          String        @default("+212 522 123456")
+  address        String        @default("72 Boulevard Massira Khadra, Casablanca")
+  currency       String        @default("MAD")
+  isOpenOverride Boolean?      // null = schedule-based, true = force open, false = force closed
+  isAutoHours    Boolean       @default(true)
+  openingHours   OpeningHour[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model OpeningHour {
+  id         String             @id @default(cuid())
+  dayOfWeek  Int                // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  dayName    String             // Monday, Tuesday, etc.
+  openTime   String             @default("09:00")
+  closeTime  String             @default("23:00")
+  isClosed   Boolean            @default(false)
+  settingsId String             @default("default")
+  settings   RestaurantSettings @relation(fields: [settingsId], references: [id], onDelete: Cascade)
+}
