@@ -20,6 +20,7 @@ export async function POST(request: NextRequest) {
       data: {
         id: "default",
         name: "Love Kitchen",
+        subtitle: "Artisanal Kitchen & Delivery",
         phone: "+212 522 123456",
         address: "72 Boulevard Massira Khadra, Casablanca",
         currency: "MAD",

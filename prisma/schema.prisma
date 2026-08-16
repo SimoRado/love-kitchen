@@ -61,7 +61,8 @@ model OrderItem {
 
 model RestaurantSettings {
   id             String        @id @default("default")
-  name           String        @default("Le Gourmet")
+  name           String        @default("Love Kitchen")
+  subtitle       String?       @default("Artisanal Kitchen & Delivery")
   phone          String        @default("+212 522 123456")
   address        String        @default("72 Boulevard Massira Khadra, Casablanca")
   currency       String        @default("MAD")

@@ -72,6 +72,7 @@ export interface OpeningHour {
 export interface RestaurantSettings {
   id: string;
   name: string;
+  subtitle?: string | null;
   phone: string;
   address: string;
   currency: string;

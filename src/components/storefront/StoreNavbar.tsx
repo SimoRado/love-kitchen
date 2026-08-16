@@ -2,35 +2,40 @@
 
 import React from "react";
 import Link from "next/link";
-import { ShoppingBag, Clock, Phone, MapPin } from "lucide-react";
+import { ShoppingBag } from "lucide-react";
 import { useCartStore } from "@/store/useCartStore";
 import { RestaurantOpenStatus } from "@/lib/openingHoursHelper";
 
 interface StoreNavbarProps {
   restaurantName?: string;
+  restaurantSubtitle?: string | null;
   openStatus: RestaurantOpenStatus;
   onOpenCart: () => void;
 }
 
 export default function StoreNavbar({
   restaurantName = "Love Kitchen",
+  restaurantSubtitle,
   openStatus,
   onOpenCart,
 }: StoreNavbarProps) {
   const itemCount = useCartStore((state) => state.getItemCount());
+  const hasSubtitle = Boolean(restaurantSubtitle && restaurantSubtitle.trim());
 
   return (
     <header className="sticky top-0 z-30 bg-[#FFFDF9]/95 backdrop-blur-md border-b border-[#EBE3D5] transition-all">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between">
         {/* Left: Clean Text Logo */}
         <Link href="/" className="flex items-center gap-3 group">
-          <div className="flex flex-col">
-            <span className="font-extrabold text-xl sm:text-2xl text-slate-900 tracking-tight leading-none group-hover:text-primary transition-colors font-serif">
+          <div className="flex flex-col justify-center">
+            <span className="font-extrabold text-xl sm:text-2xl text-slate-900 tracking-tight leading-tight group-hover:text-primary transition-colors font-serif">
               {restaurantName}
             </span>
-            <span className="text-[11px] font-semibold tracking-widest text-slate-500 uppercase mt-0.5">
-              Artisanal Kitchen & Delivery
-            </span>
+            {hasSubtitle && (
+              <span className="text-[11px] font-semibold tracking-widest text-slate-500 uppercase mt-0.5 leading-none">
+                {restaurantSubtitle?.trim()}
+              </span>
+            )}
           </div>
         </Link>
 

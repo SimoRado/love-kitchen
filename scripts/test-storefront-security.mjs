@@ -77,8 +77,10 @@ async function runSuite() {
     }),
   });
 
-  const testProduct1 = productsData.data[0];
-  const testProduct2 = productsData.data[1];
+  const freshProdRes = await fetch(`${baseUrl}/api/products`);
+  const freshProdData = await freshProdRes.json();
+  const testProduct1 = freshProdData.data[0];
+  const testProduct2 = freshProdData.data[1];
 
   const orderPayload = {
     customerName: "Kenza Tazi",
@@ -125,11 +127,14 @@ async function runSuite() {
   // 7. Test Unavailable Product Order Rejection
   console.log("\n--- 7. Testing Unavailable Product Rejection ---");
   // Mark testProduct1 unavailable
-  await fetch(`${baseUrl}/api/products/${testProduct1.id}/availability`, {
+  const patchRes = await fetch(`${baseUrl}/api/products/${testProduct1.id}/availability`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json", Cookie: sessionCookie },
     body: JSON.stringify({ available: false }),
   });
+  const patchText = await patchRes.text();
+  console.log(`PATCH status: ${patchRes.status}`, patchText);
+  const patchData = JSON.parse(patchText);
 
   const tryUnavailableOrder = await fetch(`${baseUrl}/api/orders`, {
     method: "POST",

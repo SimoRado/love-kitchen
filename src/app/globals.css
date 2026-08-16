@@ -66,6 +66,10 @@
   --color-text-light: var(--text-light);
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   background-color: var(--bg-main);
   color: var(--text-main);

@@ -48,7 +48,7 @@ export default function MenuGrid({
   }, [products, activeCategoryId, searchQuery]);
 
   return (
-    <section id="menu" className="space-y-6">
+    <section id="menu" className="space-y-6 scroll-mt-36 sm:scroll-mt-32">
       {/* Menu Header with Live Search */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -107,7 +107,7 @@ export default function MenuGrid({
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6">
+        <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-6">
           {filteredProducts.map((product) => (
             <ProductCard
               key={product.id}

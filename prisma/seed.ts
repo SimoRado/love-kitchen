@@ -17,10 +17,12 @@ async function main() {
   const settings = await prisma.restaurantSettings.create({
     data: {
       id: "default",
-      name: "Le Bistro Gourmet",
+      name: "Love Kitchen",
+      subtitle: "Artisanal Kitchen & Delivery",
       phone: "+212 522 123456",
       address: "72 Boulevard Massira Khadra, Casablanca",
       currency: "MAD",
+      deliveryFee: 15,
       isOpenOverride: null, // Follow schedule
       isAutoHours: true,
       openingHours: {

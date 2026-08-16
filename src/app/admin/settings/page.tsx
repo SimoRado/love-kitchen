@@ -39,6 +39,7 @@ export default function SettingsPage() {
 
   // Form State
   const [name, setName] = useState("");
+  const [subtitle, setSubtitle] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [currency, setCurrency] = useState("MAD");
@@ -55,6 +56,7 @@ export default function SettingsPage() {
       if (data.success && data.data) {
         const s: RestaurantSettings = data.data;
         setName(s.name || "");
+        setSubtitle(s.subtitle || "");
         setPhone(s.phone || "");
         setAddress(s.address || "");
         setCurrency(s.currency || "MAD");
@@ -117,6 +119,7 @@ export default function SettingsPage() {
       setIsSaving(true);
       const payload = {
         name: name.trim(),
+        subtitle: subtitle.trim() || null,
         phone: phone.trim(),
         address: address.trim(),
         currency: currency.trim() || "MAD",
@@ -203,10 +206,27 @@ export default function SettingsPage() {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Le Bistro Gourmet"
+              placeholder="e.g. Love Kitchen"
               required
               className="w-full px-3.5 py-2.5 rounded-lg border border-border text-sm bg-surface transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
             />
+          </div>
+
+          {/* Restaurant Subtitle / Tagline */}
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-text-muted mb-1.5">
+              Restaurant Subtitle / Tagline
+            </label>
+            <input
+              type="text"
+              value={subtitle}
+              onChange={(e) => setSubtitle(e.target.value)}
+              placeholder="e.g. Artisanal Kitchen & Delivery"
+              className="w-full px-3.5 py-2.5 rounded-lg border border-border text-sm bg-surface transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            />
+            <p className="text-[11px] text-text-muted mt-1">
+              Displayed under the restaurant name in the storefront header. Leave empty to hide it entirely.
+            </p>
           </div>
 
           {/* Phone */}

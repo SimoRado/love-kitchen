@@ -15,56 +15,80 @@ const DEFAULT_DAYS = [
 
 export async function GET() {
   try {
-    let settings = await prisma.restaurantSettings.findUnique({
-      where: { id: "default" },
-      include: {
-        openingHours: {
-          orderBy: { dayOfWeek: "asc" },
-        },
-      },
-    });
+    const rawSettings = await prisma.$queryRawUnsafe<
+      Array<{
+        id: string;
+        name: string;
+        subtitle: string | null;
+        phone: string;
+        address: string;
+        currency: string;
+        deliveryFee: number;
+        isOpenOverride: boolean | number | null;
+        isAutoHours: boolean | number;
+      }>
+    >('SELECT * FROM "RestaurantSettings" WHERE "id" = "default" LIMIT 1');
+
+    let settings = rawSettings && rawSettings.length > 0 ? rawSettings[0] : null;
 
     if (!settings) {
-      settings = await prisma.restaurantSettings.create({
-        data: {
-          id: "default",
-          name: "Love Kitchen",
-          phone: "+212 522 123456",
-          address: "72 Boulevard Massira Khadra, Casablanca",
-          currency: "MAD",
-          deliveryFee: 15,
-          isOpenOverride: null,
-          isAutoHours: true,
-          openingHours: {
-            create: DEFAULT_DAYS,
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO "RestaurantSettings" ("id", "name", "subtitle", "phone", "address", "currency", "deliveryFee", "isOpenOverride", "isAutoHours", "createdAt", "updatedAt") 
+         VALUES ('default', 'Love Kitchen', 'Artisanal Kitchen & Delivery', '+212 522 123456', '72 Boulevard Massira Khadra, Casablanca', 'MAD', 15, NULL, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+      );
+
+      for (const d of DEFAULT_DAYS) {
+        await prisma.openingHour.create({
+          data: {
+            dayOfWeek: d.dayOfWeek,
+            dayName: d.dayName,
+            openTime: d.openTime,
+            closeTime: d.closeTime,
+            isClosed: d.isClosed,
+            settingsId: "default",
           },
-        },
-        include: {
-          openingHours: {
-            orderBy: { dayOfWeek: "asc" },
-          },
-        },
-      });
+        });
+      }
+
+      const refreshed = await prisma.$queryRawUnsafe<any[]>(
+        'SELECT * FROM "RestaurantSettings" WHERE "id" = "default" LIMIT 1'
+      );
+      settings = refreshed[0];
     }
+
+    if (!settings) {
+      throw new Error("Restaurant settings could not be retrieved or initialized.");
+    }
+
+    const openingHours = await prisma.openingHour.findMany({
+      where: { settingsId: "default" },
+      orderBy: { dayOfWeek: "asc" },
+    });
+
+    const parsedIsOpenOverride =
+      settings.isOpenOverride === null || settings.isOpenOverride === undefined
+        ? null
+        : Boolean(settings.isOpenOverride);
 
     // Return public-safe settings data only
     const publicSettings = {
       id: settings.id,
       name: settings.name,
+      subtitle: settings.subtitle ?? null,
       phone: settings.phone,
       address: settings.address,
       currency: settings.currency || "MAD",
-      deliveryFee: roundMoney(settings.deliveryFee ?? 15),
-      isOpenOverride: settings.isOpenOverride,
-      isAutoHours: settings.isAutoHours,
-      openingHours: settings.openingHours,
+      deliveryFee: roundMoney(Number(settings.deliveryFee ?? 15)),
+      isOpenOverride: parsedIsOpenOverride,
+      isAutoHours: Boolean(settings.isAutoHours),
+      openingHours,
     };
 
     return NextResponse.json({ success: true, data: publicSettings });
   } catch (error) {
     console.error("Error fetching restaurant settings:", error);
     return NextResponse.json(
-      { success: false, error: "Failed to fetch settings" },
+      { success: false, error: (error as Error)?.message || "Failed to fetch settings" },
       { status: 500 }
     );
   }
@@ -78,6 +102,7 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const {
       name,
+      subtitle,
       phone,
       address,
       currency,
@@ -94,79 +119,121 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    const sanitizedSubtitle =
+      subtitle !== undefined && subtitle !== null && typeof subtitle === "string"
+        ? subtitle.trim() || null
+        : null;
+
     const numericDeliveryFee =
       deliveryFee !== undefined && deliveryFee !== null
         ? roundMoney(Math.max(0, Number(deliveryFee)))
         : 15;
 
-    // Ensure settings record exists
-    const existing = await prisma.restaurantSettings.findUnique({
-      where: { id: "default" },
-    });
+    // Load existing
+    const rawExisting = await prisma.$queryRawUnsafe<any[]>(
+      'SELECT * FROM "RestaurantSettings" WHERE "id" = "default" LIMIT 1'
+    );
+    const existing = rawExisting && rawExisting.length > 0 ? rawExisting[0] : null;
+
+    const effectivePhone = phone !== undefined ? phone.trim() : (existing?.phone ?? "");
+    const effectiveAddress = address !== undefined ? address.trim() : (existing?.address ?? "");
+    const effectiveCurrency = currency !== undefined ? currency.trim() : (existing?.currency ?? "MAD");
+    const effectiveIsOpenOverride =
+      isOpenOverride === undefined ? existing?.isOpenOverride : isOpenOverride;
+    const effectiveIsAutoHours =
+      isAutoHours !== undefined ? (isAutoHours ? 1 : 0) : (existing?.isAutoHours ?? 1);
 
     if (!existing) {
-      await prisma.restaurantSettings.create({
-        data: {
-          id: "default",
-          name: name.trim(),
-          phone: phone ? phone.trim() : "",
-          address: address ? address.trim() : "",
-          currency: currency ? currency.trim() : "MAD",
-          deliveryFee: numericDeliveryFee,
-          isOpenOverride: isOpenOverride === undefined ? null : isOpenOverride,
-          isAutoHours: isAutoHours !== undefined ? Boolean(isAutoHours) : true,
-        },
-      });
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO "RestaurantSettings" ("id", "name", "subtitle", "phone", "address", "currency", "deliveryFee", "isOpenOverride", "isAutoHours", "createdAt", "updatedAt") 
+         VALUES ('default', ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        name.trim(),
+        sanitizedSubtitle,
+        effectivePhone,
+        effectiveAddress,
+        effectiveCurrency,
+        numericDeliveryFee,
+        effectiveIsOpenOverride,
+        effectiveIsAutoHours
+      );
     } else {
-      await prisma.restaurantSettings.update({
-        where: { id: "default" },
-        data: {
-          name: name.trim(),
-          phone: phone ? phone.trim() : "",
-          address: address ? address.trim() : "",
-          currency: currency ? currency.trim() : "MAD",
-          deliveryFee: numericDeliveryFee,
-          isOpenOverride: isOpenOverride === undefined ? existing.isOpenOverride : isOpenOverride,
-          isAutoHours: isAutoHours !== undefined ? Boolean(isAutoHours) : existing.isAutoHours,
-        },
-      });
+      await prisma.$executeRawUnsafe(
+        `UPDATE "RestaurantSettings" 
+         SET "name" = ?, "subtitle" = ?, "phone" = ?, "address" = ?, "currency" = ?, "deliveryFee" = ?, "isOpenOverride" = ?, "isAutoHours" = ?, "updatedAt" = CURRENT_TIMESTAMP 
+         WHERE "id" = 'default'`,
+        name.trim(),
+        sanitizedSubtitle,
+        effectivePhone,
+        effectiveAddress,
+        effectiveCurrency,
+        numericDeliveryFee,
+        effectiveIsOpenOverride,
+        effectiveIsAutoHours
+      );
     }
 
     // Update opening hours if provided
     if (Array.isArray(openingHours)) {
       for (const hour of openingHours) {
-        if (hour.id) {
-          await prisma.openingHour.update({
-            where: { id: hour.id },
-            data: {
-              openTime: hour.openTime || "09:00",
-              closeTime: hour.closeTime || "23:00",
-              isClosed: Boolean(hour.isClosed),
-            },
-          });
-        } else if (typeof hour.dayOfWeek === "number") {
-          await prisma.openingHour.create({
-            data: {
-              dayOfWeek: hour.dayOfWeek,
-              dayName: hour.dayName || "",
-              openTime: hour.openTime || "09:00",
-              closeTime: hour.closeTime || "23:00",
-              isClosed: Boolean(hour.isClosed),
-              settingsId: "default",
-            },
-          });
+        if (typeof hour.dayOfWeek === "number") {
+          const existingHour = hour.id
+            ? await prisma.openingHour.findUnique({ where: { id: hour.id } })
+            : await prisma.openingHour.findFirst({
+                where: { settingsId: "default", dayOfWeek: hour.dayOfWeek },
+              });
+
+          if (existingHour) {
+            await prisma.openingHour.update({
+              where: { id: existingHour.id },
+              data: {
+                openTime: hour.openTime || "09:00",
+                closeTime: hour.closeTime || "23:00",
+                isClosed: Boolean(hour.isClosed),
+              },
+            });
+          } else {
+            await prisma.openingHour.create({
+              data: {
+                dayOfWeek: hour.dayOfWeek,
+                dayName: hour.dayName || "",
+                openTime: hour.openTime || "09:00",
+                closeTime: hour.closeTime || "23:00",
+                isClosed: Boolean(hour.isClosed),
+                settingsId: "default",
+              },
+            });
+          }
         }
       }
     }
 
-    const updatedSettings = await prisma.restaurantSettings.findUnique({
-      where: { id: "default" },
-      include: {
-        openingHours: {
-          orderBy: { dayOfWeek: "asc" },
-        },
-      },
+    const rawUpdated = await prisma.$queryRawUnsafe<any[]>(
+      'SELECT * FROM "RestaurantSettings" WHERE "id" = "default" LIMIT 1'
+    );
+    const updated = rawUpdated[0];
+
+    const updatedOpeningHours = await prisma.openingHour.findMany({
+      where: { settingsId: "default" },
+      orderBy: { dayOfWeek: "asc" },
     });
+
+    const parsedIsOpenOverride =
+      updated.isOpenOverride === null || updated.isOpenOverride === undefined
+        ? null
+        : Boolean(updated.isOpenOverride);
+
+    const updatedSettings = {
+      id: updated.id,
+      name: updated.name,
+      subtitle: updated.subtitle ?? null,
+      phone: updated.phone,
+      address: updated.address,
+      currency: updated.currency || "MAD",
+      deliveryFee: roundMoney(Number(updated.deliveryFee ?? 15)),
+      isOpenOverride: parsedIsOpenOverride,
+      isAutoHours: Boolean(updated.isAutoHours),
+      openingHours: updatedOpeningHours,
+    };
 
     return NextResponse.json({
       success: true,
@@ -176,7 +243,7 @@ export async function PUT(request: NextRequest) {
   } catch (error) {
     console.error("Error updating restaurant settings:", error);
     return NextResponse.json(
-      { success: false, error: "Could not update restaurant settings. Please try again." },
+      { success: false, error: (error as Error)?.message || "Could not update restaurant settings." },
       { status: 500 }
     );
   }

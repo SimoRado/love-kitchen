@@ -117,6 +117,7 @@ export default function StorefrontPage() {
       {/* 1. Navbar */}
       <StoreNavbar
         restaurantName={settings?.name || "Love Kitchen"}
+        restaurantSubtitle={settings?.subtitle}
         openStatus={openStatus}
         onOpenCart={() => setIsCartDrawerOpen(true)}
       />

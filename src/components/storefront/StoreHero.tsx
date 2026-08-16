@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ArrowDown, Utensils, Bike, ShoppingBag } from "lucide-react";
+import { ArrowDown, Bike, ShoppingBag } from "lucide-react";
 
 interface StoreHeroProps {
   restaurantName?: string;
@@ -10,6 +10,14 @@ interface StoreHeroProps {
 export default function StoreHero({
   restaurantName = "Love Kitchen",
 }: StoreHeroProps) {
+  const handleScrollToMenu = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    const menuEl = document.getElementById("menu");
+    if (menuEl) {
+      menuEl.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
   return (
     <section className="relative overflow-hidden bg-gradient-to-b from-[#FFF7ED] to-[#FFFDF9] border-b border-[#EBE3D5]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 lg:py-20">
@@ -33,7 +41,8 @@ export default function StoreHero({
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4">
               <a
                 href="#menu"
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-sm font-bold shadow-md transition-all active:scale-95"
+                onClick={handleScrollToMenu}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-sm font-bold shadow-md transition-all active:scale-95 cursor-pointer"
               >
                 <span>View Menu & Order</span>
                 <ArrowDown className="w-4 h-4 animate-bounce" />
@@ -63,21 +72,6 @@ export default function StoreHero({
                   alt="Delicious gourmet burger and sides"
                   className="w-full h-full object-cover transform hover:scale-105 transition-transform duration-700 ease-out"
                 />
-              </div>
-
-              {/* Quality highlight badge */}
-              <div className="absolute -bottom-4 -left-4 sm:bottom-4 sm:-left-4 bg-white/95 backdrop-blur-xs border border-[#E0D7C6] rounded-xl p-3.5 shadow-lg flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-primary-light text-primary flex items-center justify-center font-bold">
-                  <Utensils className="w-5 h-5" />
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-slate-900">
-                    Freshly Prepared
-                  </p>
-                  <p className="text-[11px] text-slate-500 font-medium">
-                    100% Prime Quality
-                  </p>
-                </div>
               </div>
             </div>
           </div>
