@@ -1,0 +1,83 @@
+"use client";
+
+import React from "react";
+import Link from "next/link";
+import { ShoppingBag, Clock, Phone, MapPin } from "lucide-react";
+import { useCartStore } from "@/store/useCartStore";
+import { RestaurantOpenStatus } from "@/lib/openingHoursHelper";
+
+interface StoreNavbarProps {
+  restaurantName?: string;
+  openStatus: RestaurantOpenStatus;
+  onOpenCart: () => void;
+}
+
+export default function StoreNavbar({
+  restaurantName = "Love Kitchen",
+  openStatus,
+  onOpenCart,
+}: StoreNavbarProps) {
+  const itemCount = useCartStore((state) => state.getItemCount());
+
+  return (
+    <header className="sticky top-0 z-30 bg-[#FFFDF9]/95 backdrop-blur-md border-b border-[#EBE3D5] transition-all">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between">
+        {/* Left: Clean Text Logo */}
+        <Link href="/" className="flex items-center gap-3 group">
+          <div className="flex flex-col">
+            <span className="font-extrabold text-xl sm:text-2xl text-slate-900 tracking-tight leading-none group-hover:text-primary transition-colors font-serif">
+              {restaurantName}
+            </span>
+            <span className="text-[11px] font-semibold tracking-widest text-slate-500 uppercase mt-0.5">
+              Artisanal Kitchen & Delivery
+            </span>
+          </div>
+        </Link>
+
+        {/* Center: Live Status Indicator (Desktop) */}
+        <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border border-[#E8DFD1] bg-white/80 text-xs">
+          <span
+            className={`w-2 h-2 rounded-full ${
+              openStatus.isOpen ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
+            }`}
+          />
+          <span className="font-bold text-slate-800">
+            {openStatus.statusText}
+          </span>
+          <span className="text-slate-400">•</span>
+          <span className="text-slate-500">{openStatus.statusDetail}</span>
+        </div>
+
+        {/* Right: Menu Link & Cart Trigger */}
+        <div className="flex items-center gap-3 sm:gap-4">
+          <a
+            href="#menu"
+            className="hidden sm:inline-flex text-xs font-bold uppercase tracking-wider text-slate-700 hover:text-primary transition-colors py-2 px-3"
+          >
+            Menu
+          </a>
+
+          <a
+            href="#restaurant-info"
+            className="hidden sm:inline-flex text-xs font-bold uppercase tracking-wider text-slate-700 hover:text-primary transition-colors py-2 px-3"
+          >
+            Hours & Location
+          </a>
+
+          {/* Cart Button */}
+          <button
+            onClick={onOpenCart}
+            aria-label={`View shopping cart with ${itemCount} items`}
+            className="inline-flex items-center gap-2.5 px-4 py-2 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold shadow-sm transition-all active:scale-95 cursor-pointer"
+          >
+            <ShoppingBag className="w-4 h-4" />
+            <span>Cart</span>
+            <span className="bg-white/25 px-1.5 py-0.2 rounded-full text-[11px] font-extrabold min-w-[20px] text-center">
+              {itemCount}
+            </span>
+          </button>
+        </div>
+      </div>
+    </header>
+  );
+}

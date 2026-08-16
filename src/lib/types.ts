@@ -75,11 +75,17 @@ export interface RestaurantSettings {
   phone: string;
   address: string;
   currency: string;
+  deliveryFee: number;
   isOpenOverride: boolean | null;
   isAutoHours: boolean;
   openingHours: OpeningHour[];
   createdAt: string | Date;
   updatedAt: string | Date;
+}
+
+export interface CartItem {
+  product: Product;
+  quantity: number;
 }
 
 export interface DashboardStats {

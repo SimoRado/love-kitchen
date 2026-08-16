@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAdminAuth } from "@/lib/auth";
+import { roundMoney } from "@/lib/money";
 
 export async function GET(request: NextRequest) {
   try {
@@ -55,6 +57,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const authError = await requireAdminAuth(request);
+  if (authError) return authError;
+
   try {
     const body = await request.json();
     const { name, description, price, image, available, categoryId } = body;
@@ -97,7 +102,7 @@ export async function POST(request: NextRequest) {
       data: {
         name: name.trim(),
         description: description ? description.trim() : null,
-        price: numericPrice,
+        price: roundMoney(numericPrice),
         image: image ? image.trim() : null,
         available: available !== undefined ? Boolean(available) : true,
         categoryId,
@@ -107,11 +112,14 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({
-      success: true,
-      data: product,
-      message: "Product created successfully",
-    }, { status: 201 });
+    return NextResponse.json(
+      {
+        success: true,
+        data: product,
+        message: "Product created successfully",
+      },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("Error creating product:", error);
     return NextResponse.json(

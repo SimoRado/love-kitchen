@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAdminAuth } from "@/lib/auth";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -9,6 +10,9 @@ export async function PATCH(
   request: NextRequest,
   { params }: RouteParams
 ) {
+  const authError = await requireAdminAuth(request);
+  if (authError) return authError;
+
   try {
     const { id } = await params;
     const body = await request.json();
@@ -30,7 +34,7 @@ export async function PATCH(
     return NextResponse.json({
       success: true,
       data: product,
-      message: `Product marked as ${available ? "available" : "sold out"}`,
+      message: `Product marked as ${available ? "available" : "unavailable"}`,
     });
   } catch (error) {
     console.error("Error updating product availability:", error);

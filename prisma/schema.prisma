@@ -65,6 +65,7 @@ model RestaurantSettings {
   phone          String        @default("+212 522 123456")
   address        String        @default("72 Boulevard Massira Khadra, Casablanca")
   currency       String        @default("MAD")
+  deliveryFee    Float         @default(15)
   isOpenOverride Boolean?      // null = schedule-based, true = force open, false = force closed
   isAutoHours    Boolean       @default(true)
   openingHours   OpeningHour[]

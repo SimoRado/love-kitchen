@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAdminAuth } from "@/lib/auth";
 
 export async function GET() {
   try {
@@ -25,6 +26,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const authError = await requireAdminAuth(request);
+  if (authError) return authError;
+
   try {
     const body = await request.json();
     const { name, displayOrder, active } = body;
@@ -51,11 +55,14 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({
-      success: true,
-      data: category,
-      message: "Category created successfully",
-    }, { status: 201 });
+    return NextResponse.json(
+      {
+        success: true,
+        data: category,
+        message: "Category created successfully",
+      },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("Error creating category:", error);
     return NextResponse.json(

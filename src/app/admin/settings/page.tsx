@@ -42,6 +42,7 @@ export default function SettingsPage() {
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [currency, setCurrency] = useState("MAD");
+  const [deliveryFee, setDeliveryFee] = useState("15");
   const [isOpenOverride, setIsOpenOverride] = useState<boolean | null>(null);
   const [isAutoHours, setIsAutoHours] = useState(true);
   const [openingHours, setOpeningHours] = useState<OpeningHour[]>([]);
@@ -57,6 +58,7 @@ export default function SettingsPage() {
         setPhone(s.phone || "");
         setAddress(s.address || "");
         setCurrency(s.currency || "MAD");
+        setDeliveryFee(s.deliveryFee !== undefined ? s.deliveryFee.toString() : "15");
         setIsOpenOverride(s.isOpenOverride);
         setIsAutoHours(s.isAutoHours ?? true);
 
@@ -118,6 +120,7 @@ export default function SettingsPage() {
         phone: phone.trim(),
         address: address.trim(),
         currency: currency.trim() || "MAD",
+        deliveryFee: parseFloat(deliveryFee) || 0,
         isOpenOverride,
         isAutoHours,
         openingHours,
@@ -257,6 +260,27 @@ export default function SettingsPage() {
             </div>
             <p className="text-[11px] text-text-muted mt-1">
               Default currency code applied across orders and receipts (e.g. MAD).
+            </p>
+          </div>
+
+          {/* Delivery Fee */}
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-text-muted mb-1.5">
+              Standard Delivery Fee ({currency})
+            </label>
+            <div className="relative">
+              <input
+                type="number"
+                step="0.5"
+                min="0"
+                value={deliveryFee}
+                onChange={(e) => setDeliveryFee(e.target.value)}
+                placeholder="15.00"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-border text-sm bg-surface transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              />
+            </div>
+            <p className="text-[11px] text-text-muted mt-1">
+              Applied automatically to all Delivery orders at checkout.
             </p>
           </div>
         </div>

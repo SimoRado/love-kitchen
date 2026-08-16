@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { checkRestaurantOpen } from "@/lib/openingHoursHelper";
+import { calculateOrderTotals, roundMoney } from "@/lib/money";
 
 export async function GET(request: NextRequest) {
   try {
@@ -55,61 +57,155 @@ export async function POST(request: NextRequest) {
       customerName,
       customerPhone,
       customerAddress,
-      orderType,
+      orderType = "DELIVERY",
       notes,
       items,
-      deliveryFee = 0,
     } = body;
 
-    if (!customerName || !customerPhone) {
+    // 1. Validate Customer Information
+    if (!customerName || typeof customerName !== "string" || !customerName.trim()) {
       return NextResponse.json(
-        { success: false, error: "Customer name and phone number are required" },
+        { success: false, error: "Customer full name is required." },
+        { status: 400 }
+      );
+    }
+
+    if (!customerPhone || typeof customerPhone !== "string" || !customerPhone.trim()) {
+      return NextResponse.json(
+        { success: false, error: "Customer phone number is required." },
+        { status: 400 }
+      );
+    }
+
+    const normalizedOrderType =
+      String(orderType).toUpperCase() === "PICKUP" ? "PICKUP" : "DELIVERY";
+
+    if (
+      normalizedOrderType === "DELIVERY" &&
+      (!customerAddress || typeof customerAddress !== "string" || !customerAddress.trim())
+    ) {
+      return NextResponse.json(
+        { success: false, error: "Delivery address is required for delivery orders." },
         { status: 400 }
       );
     }
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json(
-        { success: false, error: "Order must contain at least one item" },
+        { success: false, error: "Your order must contain at least one product." },
         { status: 400 }
       );
     }
 
-    // Calculate subtotal
-    let subtotal = 0;
-    const validatedItems = items.map((item: { productId?: string; productName: string; price: number; quantity: number }) => {
-      const price = Number(item.price);
-      const qty = Number(item.quantity) || 1;
-      subtotal += price * qty;
-      return {
-        productId: item.productId || null,
-        productName: item.productName,
-        price,
-        quantity: qty,
-      };
+    // 2. Fetch Restaurant Settings & Verify Restaurant is OPEN
+    const settings = await prisma.restaurantSettings.findUnique({
+      where: { id: "default" },
+      include: {
+        openingHours: {
+          orderBy: { dayOfWeek: "asc" },
+        },
+      },
     });
 
-    const numericDeliveryFee = orderType === "PICKUP" ? 0 : Number(deliveryFee) || 0;
-    const total = subtotal + numericDeliveryFee;
+    const openStatus = checkRestaurantOpen(settings);
+    if (!openStatus.isOpen) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "The restaurant is currently closed. Orders cannot be placed right now.",
+        },
+        { status: 400 }
+      );
+    }
 
-    // Generate unique order number (e.g. ORD-8492)
+    // 3. Load & Verify all Products from Database (Authoritative check)
+    const itemProductIds = items
+      .map((it: { productId?: string }) => it.productId)
+      .filter((id): id is string => Boolean(id));
+
+    if (itemProductIds.length !== items.length) {
+      return NextResponse.json(
+        { success: false, error: "Invalid product information in order items." },
+        { status: 400 }
+      );
+    }
+
+    const dbProducts = await prisma.product.findMany({
+      where: {
+        id: { in: itemProductIds },
+      },
+    });
+
+    const productMap = new Map(dbProducts.map((p) => [p.id, p]));
+
+    const validatedItemsToCreate: Array<{
+      productId: string;
+      productName: string;
+      price: number;
+      quantity: number;
+    }> = [];
+
+    for (const item of items) {
+      const dbProduct = productMap.get(item.productId);
+      if (!dbProduct) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "One or more items in your cart no longer exist. Please refresh your cart.",
+          },
+          { status: 400 }
+        );
+      }
+
+      // Check product availability
+      if (!dbProduct.available) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `"${dbProduct.name}" is currently unavailable or sold out. Please remove it from your cart.`,
+          },
+          { status: 400 }
+        );
+      }
+
+      const qty = Math.max(1, Math.floor(Number(item.quantity)) || 1);
+      const authoritativePrice = roundMoney(dbProduct.price);
+
+      validatedItemsToCreate.push({
+        productId: dbProduct.id,
+        productName: dbProduct.name,
+        price: authoritativePrice,
+        quantity: qty,
+      });
+    }
+
+    // 4. Authoritative Totals Calculation using Money helper
+    const settingsDeliveryFee = settings?.deliveryFee ?? 15;
+    const { subtotal, deliveryFee, total } = calculateOrderTotals(
+      validatedItemsToCreate,
+      normalizedOrderType,
+      settingsDeliveryFee
+    );
+
+    // 5. Generate Order Number
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const orderNumber = `ORD-${randomSuffix}`;
 
+    // 6. Create Order and OrderItems in Database
     const order = await prisma.order.create({
       data: {
         orderNumber,
         customerName: customerName.trim(),
         customerPhone: customerPhone.trim(),
-        customerAddress: customerAddress ? customerAddress.trim() : null,
-        orderType: orderType === "PICKUP" ? "PICKUP" : "DELIVERY",
+        customerAddress: normalizedOrderType === "DELIVERY" ? customerAddress.trim() : null,
+        orderType: normalizedOrderType,
         status: "PENDING",
         subtotal,
-        deliveryFee: numericDeliveryFee,
+        deliveryFee,
         total,
-        notes: notes ? notes.trim() : null,
+        notes: notes && typeof notes === "string" ? notes.trim() : null,
         items: {
-          create: validatedItems,
+          create: validatedItemsToCreate,
         },
       },
       include: {
@@ -117,15 +213,18 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({
-      success: true,
-      data: order,
-      message: "Order placed successfully",
-    }, { status: 201 });
-  } catch (error) {
-    console.error("Error creating order:", error);
     return NextResponse.json(
-      { success: false, error: "Could not create order. Please try again." },
+      {
+        success: true,
+        data: order,
+        message: `Order #${order.orderNumber} placed successfully!`,
+      },
+      { status: 201 }
+    );
+  } catch (error) {
+    console.error("Error submitting order:", error);
+    return NextResponse.json(
+      { success: false, error: "Could not place your order. Please try again." },
       { status: 500 }
     );
   }

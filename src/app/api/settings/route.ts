@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAdminAuth } from "@/lib/auth";
+import { roundMoney } from "@/lib/money";
 
 const DEFAULT_DAYS = [
-  { dayOfWeek: 1, dayName: "Monday", openTime: "09:00", closeTime: "23:00", isClosed: false },
-  { dayOfWeek: 2, dayName: "Tuesday", openTime: "09:00", closeTime: "23:00", isClosed: false },
-  { dayOfWeek: 3, dayName: "Wednesday", openTime: "09:00", closeTime: "23:00", isClosed: false },
-  { dayOfWeek: 4, dayName: "Thursday", openTime: "09:00", closeTime: "23:00", isClosed: false },
-  { dayOfWeek: 5, dayName: "Friday", openTime: "09:00", closeTime: "23:00", isClosed: false },
-  { dayOfWeek: 6, dayName: "Saturday", openTime: "09:00", closeTime: "23:00", isClosed: false },
-  { dayOfWeek: 0, dayName: "Sunday", openTime: "09:00", closeTime: "23:00", isClosed: false },
+  { dayOfWeek: 1, dayName: "Monday", openTime: "11:30", closeTime: "23:30", isClosed: false },
+  { dayOfWeek: 2, dayName: "Tuesday", openTime: "11:30", closeTime: "23:30", isClosed: false },
+  { dayOfWeek: 3, dayName: "Wednesday", openTime: "11:30", closeTime: "23:30", isClosed: false },
+  { dayOfWeek: 4, dayName: "Thursday", openTime: "11:30", closeTime: "23:30", isClosed: false },
+  { dayOfWeek: 5, dayName: "Friday", openTime: "11:30", closeTime: "00:30", isClosed: false },
+  { dayOfWeek: 6, dayName: "Saturday", openTime: "11:30", closeTime: "00:30", isClosed: false },
+  { dayOfWeek: 0, dayName: "Sunday", openTime: "12:00", closeTime: "23:00", isClosed: false },
 ];
 
 export async function GET() {
@@ -23,14 +25,14 @@ export async function GET() {
     });
 
     if (!settings) {
-      // Auto create default settings
       settings = await prisma.restaurantSettings.create({
         data: {
           id: "default",
-          name: "Le Gourmet",
+          name: "Love Kitchen",
           phone: "+212 522 123456",
           address: "72 Boulevard Massira Khadra, Casablanca",
           currency: "MAD",
+          deliveryFee: 15,
           isOpenOverride: null,
           isAutoHours: true,
           openingHours: {
@@ -45,7 +47,20 @@ export async function GET() {
       });
     }
 
-    return NextResponse.json({ success: true, data: settings });
+    // Return public-safe settings data only
+    const publicSettings = {
+      id: settings.id,
+      name: settings.name,
+      phone: settings.phone,
+      address: settings.address,
+      currency: settings.currency || "MAD",
+      deliveryFee: roundMoney(settings.deliveryFee ?? 15),
+      isOpenOverride: settings.isOpenOverride,
+      isAutoHours: settings.isAutoHours,
+      openingHours: settings.openingHours,
+    };
+
+    return NextResponse.json({ success: true, data: publicSettings });
   } catch (error) {
     console.error("Error fetching restaurant settings:", error);
     return NextResponse.json(
@@ -56,6 +71,9 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
+  const authError = await requireAdminAuth(request);
+  if (authError) return authError;
+
   try {
     const body = await request.json();
     const {
@@ -63,6 +81,7 @@ export async function PUT(request: NextRequest) {
       phone,
       address,
       currency,
+      deliveryFee,
       isOpenOverride,
       isAutoHours,
       openingHours,
@@ -74,6 +93,11 @@ export async function PUT(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    const numericDeliveryFee =
+      deliveryFee !== undefined && deliveryFee !== null
+        ? roundMoney(Math.max(0, Number(deliveryFee)))
+        : 15;
 
     // Ensure settings record exists
     const existing = await prisma.restaurantSettings.findUnique({
@@ -88,6 +112,7 @@ export async function PUT(request: NextRequest) {
           phone: phone ? phone.trim() : "",
           address: address ? address.trim() : "",
           currency: currency ? currency.trim() : "MAD",
+          deliveryFee: numericDeliveryFee,
           isOpenOverride: isOpenOverride === undefined ? null : isOpenOverride,
           isAutoHours: isAutoHours !== undefined ? Boolean(isAutoHours) : true,
         },
@@ -100,6 +125,7 @@ export async function PUT(request: NextRequest) {
           phone: phone ? phone.trim() : "",
           address: address ? address.trim() : "",
           currency: currency ? currency.trim() : "MAD",
+          deliveryFee: numericDeliveryFee,
           isOpenOverride: isOpenOverride === undefined ? existing.isOpenOverride : isOpenOverride,
           isAutoHours: isAutoHours !== undefined ? Boolean(isAutoHours) : existing.isAutoHours,
         },

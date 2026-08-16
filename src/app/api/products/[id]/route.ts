@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAdminAuth } from "@/lib/auth";
+import { roundMoney } from "@/lib/money";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -39,6 +41,9 @@ export async function PUT(
   request: NextRequest,
   { params }: RouteParams
 ) {
+  const authError = await requireAdminAuth(request);
+  if (authError) return authError;
+
   try {
     const { id } = await params;
     const body = await request.json();
@@ -77,7 +82,6 @@ export async function PUT(
       );
     }
 
-    // Verify category exists
     const categoryExists = await prisma.category.findUnique({
       where: { id: categoryId },
     });
@@ -94,7 +98,7 @@ export async function PUT(
       data: {
         name: name.trim(),
         description: description ? description.trim() : null,
-        price: numericPrice,
+        price: roundMoney(numericPrice),
         image: image !== undefined ? (image ? image.trim() : null) : existingProduct.image,
         available: available !== undefined ? Boolean(available) : existingProduct.available,
         categoryId,
@@ -122,6 +126,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: RouteParams
 ) {
+  const authError = await requireAdminAuth(request);
+  if (authError) return authError;
+
   try {
     const { id } = await params;
     const existingProduct = await prisma.product.findUnique({

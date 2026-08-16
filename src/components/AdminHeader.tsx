@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { Menu, Database, Loader2, Sparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Menu, Loader2, Sparkles, LogOut } from "lucide-react";
 import { useToast } from "./ToastContext";
 
 interface AdminHeaderProps {
@@ -17,8 +18,10 @@ export default function AdminHeader({
   onOpenSidebar,
   onDataRefresh,
 }: AdminHeaderProps) {
+  const router = useRouter();
   const { showToast } = useToast();
   const [isSeeding, setIsSeeding] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const handleSeedDatabase = async () => {
     if (isSeeding) return;
@@ -45,6 +48,20 @@ export default function AdminHeader({
       showToast("Network error while seeding database", "error");
     } finally {
       setIsSeeding(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      setIsLoggingOut(true);
+      await fetch("/api/auth/logout", { method: "POST" });
+      showToast("Logged out successfully.", "info");
+      router.push("/admin/login");
+      router.refresh();
+    } catch {
+      showToast("Logout failed. Please try again.", "error");
+    } finally {
+      setIsLoggingOut(false);
     }
   };
 
@@ -98,6 +115,21 @@ export default function AdminHeader({
             Admin Live
           </span>
         </div>
+
+        {/* Logout button */}
+        <button
+          onClick={handleLogout}
+          disabled={isLoggingOut}
+          title="Log out of Admin Portal"
+          className="p-1.5 rounded-lg border border-border text-text-muted hover:text-red-600 hover:bg-red-50 transition-colors ml-1"
+          aria-label="Log out"
+        >
+          {isLoggingOut ? (
+            <Loader2 className="w-4 h-4 animate-spin text-red-500" />
+          ) : (
+            <LogOut className="w-4 h-4" />
+          )}
+        </button>
       </div>
     </header>
   );

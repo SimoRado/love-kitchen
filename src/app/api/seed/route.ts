@@ -1,7 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAdminAuth } from "@/lib/auth";
 
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const authError = await requireAdminAuth(request);
+  if (authError) return authError;
+
   try {
     // Clean up existing data
     await prisma.orderItem.deleteMany();
@@ -15,10 +19,11 @@ export async function POST() {
     await prisma.restaurantSettings.create({
       data: {
         id: "default",
-        name: "Le Bistro Gourmet",
+        name: "Love Kitchen",
         phone: "+212 522 123456",
         address: "72 Boulevard Massira Khadra, Casablanca",
         currency: "MAD",
+        deliveryFee: 15,
         isOpenOverride: null,
         isAutoHours: true,
         openingHours: {
@@ -195,117 +200,6 @@ export async function POST() {
             { productId: p1.id, productName: p1.name, price: p1.price, quantity: 2 },
             { productId: p6.id, productName: p6.name, price: p6.price, quantity: 1 },
             { productId: p11.id, productName: p11.name, price: p11.price, quantity: 2 },
-          ],
-        },
-      },
-    });
-
-    await prisma.order.create({
-      data: {
-        orderNumber: "ORD-1002",
-        customerName: "Sara El Mansouri",
-        customerPhone: "+212 662 987654",
-        customerAddress: "15 Rue Jean Jaurès, Gauthier, Casablanca",
-        orderType: "DELIVERY",
-        status: "CONFIRMED",
-        subtotal: 125,
-        deliveryFee: 15,
-        total: 140,
-        notes: "Extra spicy please!",
-        createdAt: new Date(now.getTime() - 25 * 60 * 1000),
-        items: {
-          create: [
-            { productId: p5.id, productName: p5.name, price: p5.price, quantity: 1 },
-            { productId: p9.id, productName: p9.name, price: p9.price, quantity: 1 },
-          ],
-        },
-      },
-    });
-
-    await prisma.order.create({
-      data: {
-        orderNumber: "ORD-1003",
-        customerName: "Karim Tazi",
-        customerPhone: "+212 663 456789",
-        customerAddress: null,
-        orderType: "PICKUP",
-        status: "PREPARING",
-        subtotal: 110,
-        deliveryFee: 0,
-        total: 110,
-        notes: "Will arrive in 15 minutes",
-        createdAt: new Date(now.getTime() - 40 * 60 * 1000),
-        items: {
-          create: [
-            { productId: p2.id, productName: p2.name, price: p2.price, quantity: 1 },
-            { productId: p10.id, productName: p10.name, price: p10.price, quantity: 1 },
-          ],
-        },
-      },
-    });
-
-    await prisma.order.create({
-      data: {
-        orderNumber: "ORD-1004",
-        customerName: "Nadia Idrissi",
-        customerPhone: "+212 664 112233",
-        customerAddress: "Villa 44, Boulevard Franklin Roosevelt, Casablanca",
-        orderType: "DELIVERY",
-        status: "READY",
-        subtotal: 225,
-        deliveryFee: 15,
-        total: 240,
-        notes: null,
-        createdAt: new Date(now.getTime() - 55 * 60 * 1000),
-        items: {
-          create: [
-            { productId: p4.id, productName: p4.name, price: p4.price, quantity: 2 },
-            { productId: p7.id, productName: p7.name, price: p7.price, quantity: 1 },
-            { productId: p8.id, productName: p8.name, price: p8.price, quantity: 1 },
-          ],
-        },
-      },
-    });
-
-    await prisma.order.create({
-      data: {
-        orderNumber: "ORD-1005",
-        customerName: "Youssef Alami",
-        customerPhone: "+212 665 778899",
-        customerAddress: "Bureau 402, Twin Center, Casablanca",
-        orderType: "DELIVERY",
-        status: "COMPLETED",
-        subtotal: 125,
-        deliveryFee: 15,
-        total: 140,
-        notes: "Deliver to 4th floor reception",
-        createdAt: new Date(now.getTime() - 2 * 60 * 60 * 1000),
-        items: {
-          create: [
-            { productId: p3.id, productName: p3.name, price: p3.price, quantity: 1 },
-            { productId: p6.id, productName: p6.name, price: p6.price, quantity: 1 },
-            { productId: p11.id, productName: p11.name, price: p11.price, quantity: 1 },
-          ],
-        },
-      },
-    });
-
-    await prisma.order.create({
-      data: {
-        orderNumber: "ORD-1006",
-        customerName: "Hassan Chraibi",
-        customerPhone: "+212 666 334455",
-        customerAddress: null,
-        orderType: "PICKUP",
-        status: "CANCELLED",
-        subtotal: 65,
-        deliveryFee: 0,
-        total: 65,
-        notes: "Customer called to cancel order",
-        createdAt: new Date(now.getTime() - 3 * 60 * 60 * 1000),
-        items: {
-          create: [
-            { productId: p1.id, productName: p1.name, price: p1.price, quantity: 1 },
           ],
         },
       },
