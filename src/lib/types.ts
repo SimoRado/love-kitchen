@@ -10,6 +10,32 @@ export interface Category {
   };
 }
 
+export interface ProductModifierOption {
+  id: string;
+  modifierGroupId: string;
+  name: string;
+  priceDelta: number;
+  active: boolean;
+  displayOrder: number;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+}
+
+export interface ProductModifierGroup {
+  id: string;
+  productId: string;
+  name: string;
+  description?: string | null;
+  required: boolean;
+  minSelections: number;
+  maxSelections: number;
+  displayOrder: number;
+  active: boolean;
+  options: ProductModifierOption[];
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -19,6 +45,7 @@ export interface Product {
   available: boolean;
   categoryId: string;
   category?: Category;
+  modifierGroups?: ProductModifierGroup[];
   createdAt: string | Date;
   updatedAt: string | Date;
 }
@@ -33,13 +60,24 @@ export type OrderStatus =
 
 export type OrderType = "DELIVERY" | "PICKUP";
 
+export interface OrderItemModifier {
+  id: string;
+  orderItemId: string;
+  modifierGroupName: string;
+  modifierOptionName: string;
+  priceDelta: number;
+  createdAt?: string | Date;
+}
+
 export interface OrderItem {
   id: string;
   orderId: string;
   productId: string | null;
   productName: string;
   price: number;
+  configuredUnitPrice?: number | null;
   quantity: number;
+  modifiers?: OrderItemModifier[];
 }
 
 export interface Order {
@@ -84,9 +122,20 @@ export interface RestaurantSettings {
   updatedAt: string | Date;
 }
 
+export interface SelectedModifierOptionSnapshot {
+  groupId: string;
+  groupName: string;
+  optionId: string;
+  optionName: string;
+  priceDelta: number;
+}
+
 export interface CartItem {
+  id: string; // unique configuration key: `${product.id}_${sortedOptionIds.join('_')}`
   product: Product;
   quantity: number;
+  selectedModifiers: SelectedModifierOptionSnapshot[];
+  configuredUnitPrice: number;
 }
 
 export interface DashboardStats {

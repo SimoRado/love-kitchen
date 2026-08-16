@@ -23,10 +23,10 @@ export default function CategoryNav({
           {/* "All" button */}
           <button
             onClick={() => onSelectCategory("ALL")}
-            className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+            className={`px-4 py-2 rounded-xl text-xs whitespace-nowrap transition-all cursor-pointer ${
               activeCategoryId === "ALL"
-                ? "bg-primary text-white shadow-sm"
-                : "bg-white hover:bg-orange-50/60 text-slate-700 border border-[#E8DFD1]"
+                ? "bg-primary text-white font-semibold shadow-xs"
+                : "bg-white hover:bg-orange-50/60 text-slate-700 font-medium border border-[#E8DFD1]"
             }`}
           >
             All Items
@@ -40,10 +40,10 @@ export default function CategoryNav({
               <button
                 key={cat.id}
                 onClick={() => onSelectCategory(cat.id)}
-                className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                className={`px-4 py-2 rounded-xl text-xs whitespace-nowrap transition-all cursor-pointer ${
                   isSelected
-                    ? "bg-primary text-white shadow-sm"
-                    : "bg-white hover:bg-orange-50/60 text-slate-700 border border-[#E8DFD1]"
+                    ? "bg-primary text-white font-semibold shadow-xs"
+                    : "bg-white hover:bg-orange-50/60 text-slate-700 font-medium border border-[#E8DFD1]"
                 }`}
               >
                 {cat.name}

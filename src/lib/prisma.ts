@@ -1,9 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
-
+// Re-instantiate PrismaClient with latest generated schema models
 export const prisma = new PrismaClient({
   log: ["error"],
 });

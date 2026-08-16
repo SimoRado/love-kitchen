@@ -281,8 +281,15 @@ export default function OrdersPage() {
                 {filteredOrders.map((order) => {
                   const typeConfig = getOrderTypeConfig(order.orderType);
                   const itemsSummary = order.items
-                    .map((it) => `${it.quantity}× ${it.productName}`)
-                    .join(", ");
+                    .map(
+                      (it) =>
+                        `${it.quantity}× ${it.productName}${
+                          it.modifiers && it.modifiers.length > 0
+                            ? ` (${it.modifiers.map((m) => m.modifierOptionName).join(", ")})`
+                            : ""
+                        }`
+                    )
+                    .join("; ");
 
                   return (
                     <tr

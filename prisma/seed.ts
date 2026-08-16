@@ -5,9 +5,12 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("🌱 Starting database seeding...");
 
-  // Clean up existing data
+  // Clean up existing data (Safe Cascade)
+  await prisma.orderItemModifier.deleteMany();
   await prisma.orderItem.deleteMany();
   await prisma.order.deleteMany();
+  await prisma.productModifierOption.deleteMany();
+  await prisma.productModifierGroup.deleteMany();
   await prisma.product.deleteMany();
   await prisma.category.deleteMany();
   await prisma.openingHour.deleteMany();
@@ -42,7 +45,7 @@ async function main() {
 
   // 2. Categories
   const catBurgers = await prisma.category.create({
-    data: { name: "Burgers", displayOrder: 1, active: true },
+    data: { name: "Burgers & Tacos", displayOrder: 1, active: true },
   });
   const catPizza = await prisma.category.create({
     data: { name: "Pizza", displayOrder: 2, active: true },
@@ -59,6 +62,71 @@ async function main() {
   console.log("✅ Categories created.");
 
   // 3. Products
+  const tacos = await prisma.product.create({
+    data: {
+      name: "French Tacos (Artisanal)",
+      description: "Signature French tacos with golden french fries and creamy house Gruyère cheese sauce wrapped in a toasted tortilla.",
+      price: 45,
+      image: "https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=600&auto=format&fit=crop&q=80",
+      available: true,
+      categoryId: catBurgers.id,
+      modifierGroups: {
+        create: [
+          {
+            name: "Choose Your Sauces",
+            description: "Choose up to 2 sauces for free",
+            required: true,
+            minSelections: 1,
+            maxSelections: 2,
+            displayOrder: 1,
+            active: true,
+            options: {
+              create: [
+                { name: "Algerian", priceDelta: 0, displayOrder: 1, active: true },
+                { name: "Biggy", priceDelta: 0, displayOrder: 2, active: true },
+                { name: "Andalouse", priceDelta: 0, displayOrder: 3, active: true },
+                { name: "Barbecue", priceDelta: 0, displayOrder: 4, active: true },
+              ],
+            },
+          },
+          {
+            name: "Extras",
+            description: "Add savory extras to your tacos",
+            required: false,
+            minSelections: 0,
+            maxSelections: 3,
+            displayOrder: 2,
+            active: true,
+            options: {
+              create: [
+                { name: "Extra Chicken", priceDelta: 10, displayOrder: 1, active: true },
+                { name: "Extra Meat", priceDelta: 12, displayOrder: 2, active: true },
+                { name: "Nuggets", priceDelta: 8, displayOrder: 3, active: true },
+              ],
+            },
+          },
+          {
+            name: "Remove Ingredients",
+            description: "Custom exclusions",
+            required: false,
+            minSelections: 0,
+            maxSelections: 4,
+            displayOrder: 3,
+            active: true,
+            options: {
+              create: [
+                { name: "No onions", priceDelta: 0, displayOrder: 1, active: true },
+                { name: "No tomato", priceDelta: 0, displayOrder: 2, active: true },
+                { name: "No pickles", priceDelta: 0, displayOrder: 3, active: true },
+                { name: "No sauce", priceDelta: 0, displayOrder: 4, active: true },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  });
+
   const p1 = await prisma.product.create({
     data: {
       name: "Classic Cheeseburger",
@@ -180,152 +248,8 @@ async function main() {
     },
   });
 
-  console.log("✅ Products created.");
-
-  // 4. Sample Orders
-  const now = new Date();
-
-  // Order 1: PENDING
-  await prisma.order.create({
-    data: {
-      orderNumber: "ORD-1001",
-      customerName: "Amine Benali",
-      customerPhone: "+212 661 123456",
-      customerAddress: "Appt 12, Résidence Anfa, Casablanca",
-      orderType: "DELIVERY",
-      status: "PENDING",
-      subtotal: 195,
-      deliveryFee: 15,
-      total: 210,
-      notes: "Please do not ring the bell, newborn sleeping.",
-      createdAt: new Date(now.getTime() - 10 * 60 * 1000), // 10 mins ago
-      items: {
-        create: [
-          { productId: p1.id, productName: p1.name, price: p1.price, quantity: 2 },
-          { productId: p6.id, productName: p6.name, price: p6.price, quantity: 1 },
-          { productId: p11.id, productName: p11.name, price: p11.price, quantity: 2 },
-        ],
-      },
-    },
-  });
-
-  // Order 2: CONFIRMED
-  await prisma.order.create({
-    data: {
-      orderNumber: "ORD-1002",
-      customerName: "Sara El Mansouri",
-      customerPhone: "+212 662 987654",
-      customerAddress: "15 Rue Jean Jaurès, Gauthier, Casablanca",
-      orderType: "DELIVERY",
-      status: "CONFIRMED",
-      subtotal: 125,
-      deliveryFee: 15,
-      total: 140,
-      notes: "Extra spicy please!",
-      createdAt: new Date(now.getTime() - 25 * 60 * 1000), // 25 mins ago
-      items: {
-        create: [
-          { productId: p5.id, productName: p5.name, price: p5.price, quantity: 1 },
-          { productId: p9.id, productName: p9.name, price: p9.price, quantity: 1 },
-        ],
-      },
-    },
-  });
-
-  // Order 3: PREPARING
-  await prisma.order.create({
-    data: {
-      orderNumber: "ORD-1003",
-      customerName: "Karim Tazi",
-      customerPhone: "+212 663 456789",
-      customerAddress: null,
-      orderType: "PICKUP",
-      status: "PREPARING",
-      subtotal: 110,
-      deliveryFee: 0,
-      total: 110,
-      notes: "Will arrive in 15 minutes",
-      createdAt: new Date(now.getTime() - 40 * 60 * 1000), // 40 mins ago
-      items: {
-        create: [
-          { productId: p2.id, productName: p2.name, price: p2.price, quantity: 1 },
-          { productId: p10.id, productName: p10.name, price: p10.price, quantity: 1 },
-        ],
-      },
-    },
-  });
-
-  // Order 4: READY
-  await prisma.order.create({
-    data: {
-      orderNumber: "ORD-1004",
-      customerName: "Nadia Idrissi",
-      customerPhone: "+212 664 112233",
-      customerAddress: "Villa 44, Boulevard Franklin Roosevelt, Casablanca",
-      orderType: "DELIVERY",
-      status: "READY",
-      subtotal: 225,
-      deliveryFee: 15,
-      total: 240,
-      notes: null,
-      createdAt: new Date(now.getTime() - 55 * 60 * 1000),
-      items: {
-        create: [
-          { productId: p4.id, productName: p4.name, price: p4.price, quantity: 2 },
-          { productId: p7.id, productName: p7.name, price: p7.price, quantity: 1 },
-          { productId: p8.id, productName: p8.name, price: p8.price, quantity: 1 },
-        ],
-      },
-    },
-  });
-
-  // Order 5: COMPLETED
-  await prisma.order.create({
-    data: {
-      orderNumber: "ORD-1005",
-      customerName: "Youssef Alami",
-      customerPhone: "+212 665 778899",
-      customerAddress: "Bureau 402, Twin Center, Casablanca",
-      orderType: "DELIVERY",
-      status: "COMPLETED",
-      subtotal: 125,
-      deliveryFee: 15,
-      total: 140,
-      notes: "Deliver to 4th floor reception",
-      createdAt: new Date(now.getTime() - 2 * 60 * 60 * 1000), // 2 hours ago
-      items: {
-        create: [
-          { productId: p3.id, productName: p3.name, price: p3.price, quantity: 1 },
-          { productId: p6.id, productName: p6.name, price: p6.price, quantity: 1 },
-          { productId: p11.id, productName: p11.name, price: p11.price, quantity: 1 },
-        ],
-      },
-    },
-  });
-
-  // Order 6: CANCELLED
-  await prisma.order.create({
-    data: {
-      orderNumber: "ORD-1006",
-      customerName: "Hassan Chraibi",
-      customerPhone: "+212 666 334455",
-      customerAddress: null,
-      orderType: "PICKUP",
-      status: "CANCELLED",
-      subtotal: 65,
-      deliveryFee: 0,
-      total: 65,
-      notes: "Customer called to cancel order",
-      createdAt: new Date(now.getTime() - 3 * 60 * 60 * 1000),
-      items: {
-        create: [
-          { productId: p1.id, productName: p1.name, price: p1.price, quantity: 1 },
-        ],
-      },
-    },
-  });
-
-  console.log("✅ Sample orders created.");
+  console.log("✅ Products created (including customizable French Tacos).");
+  console.log("✅ Clean slate (0 initial test orders). Ready for production testing.");
   console.log("🎉 Seeding completed successfully!");
 }
 

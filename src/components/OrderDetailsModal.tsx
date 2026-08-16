@@ -262,22 +262,64 @@ export default function OrderDetailsModal({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {order.items.map((item) => (
-                    <tr key={item.id} className="hover:bg-surface-hover/50">
-                      <td className="py-3 px-4 font-semibold text-text-main">
-                        {item.productName}
-                      </td>
-                      <td className="py-3 px-4 text-center text-text-muted font-medium">
-                        {item.quantity}×
-                      </td>
-                      <td className="py-3 px-4 text-right text-text-muted">
-                        {formatCurrency(item.price, currency)}
-                      </td>
-                      <td className="py-3 px-4 text-right font-bold text-text-main">
-                        {formatCurrency(item.price * item.quantity, currency)}
-                      </td>
-                    </tr>
-                  ))}
+                  {order.items.map((item) => {
+                    const unitPrice = item.configuredUnitPrice ?? item.price;
+                    const lineTotal = unitPrice * item.quantity;
+
+                    // Group modifiers
+                    const groupedMods: { [group: string]: Array<{ name: string; delta: number }> } = {};
+                    if (item.modifiers && item.modifiers.length > 0) {
+                      for (const m of item.modifiers) {
+                        if (!groupedMods[m.modifierGroupName]) groupedMods[m.modifierGroupName] = [];
+                        groupedMods[m.modifierGroupName].push({
+                          name: m.modifierOptionName,
+                          delta: m.priceDelta,
+                        });
+                      }
+                    }
+
+                    return (
+                      <tr key={item.id} className="hover:bg-surface-hover/50">
+                        <td className="py-3 px-4">
+                          <div className="font-semibold text-text-main text-xs">
+                            {item.productName}
+                          </div>
+
+                          {/* Modifiers snapshot breakdown */}
+                          {item.modifiers && item.modifiers.length > 0 && (
+                            <div className="mt-1.5 space-y-1 text-[11px] text-text-muted bg-surface-subtle p-2 rounded-lg border border-border/60">
+                              {Object.entries(groupedMods).map(([groupName, mods]) => (
+                                <div key={groupName} className="flex items-baseline gap-1.5 leading-snug">
+                                  <span className="font-semibold text-text-main">{groupName}:</span>
+                                  <span className="text-text-muted font-normal">
+                                    {mods
+                                      .map(
+                                        (m) =>
+                                          `${m.name}${
+                                            m.delta > 0
+                                              ? ` (+${formatCurrency(m.delta, currency)})`
+                                              : ""
+                                          }`
+                                      )
+                                      .join(", ")}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-center text-text-muted font-medium align-top">
+                          {item.quantity}×
+                        </td>
+                        <td className="py-3 px-4 text-right text-text-muted align-top">
+                          {formatCurrency(unitPrice, currency)}
+                        </td>
+                        <td className="py-3 px-4 text-right font-bold text-text-main align-top">
+                          {formatCurrency(lineTotal, currency)}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
 

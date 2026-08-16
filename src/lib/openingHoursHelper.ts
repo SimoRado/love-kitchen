@@ -9,7 +9,7 @@ export interface RestaurantOpenStatus {
 
 /**
  * Checks whether the restaurant is currently OPEN or CLOSED
- * respecting manual overrides and weekly schedule.
+ * respecting manual overrides with highest priority, then weekly schedule.
  */
 export function checkRestaurantOpen(
   settings: RestaurantSettings | null | undefined,
@@ -24,17 +24,19 @@ export function checkRestaurantOpen(
     };
   }
 
-  // 1. Check Manual Overrides
-  if (settings.isOpenOverride === true) {
-    return {
-      isOpen: true,
-      statusText: "OPEN NOW",
-      statusDetail: "Accepting orders right now",
-      badgeType: "open",
-    };
+  // 1. STRICT MANUAL ADMIN OVERRIDE CHECK (Priority #1)
+  // Normalize potential numeric, string, or boolean representation
+  let override: boolean | null = null;
+  const rawOverride = settings.isOpenOverride as unknown;
+
+  if (rawOverride === true || rawOverride === 1 || rawOverride === "true" || rawOverride === "1") {
+    override = true;
+  } else if (rawOverride === false || rawOverride === 0 || rawOverride === "false" || rawOverride === "0") {
+    override = false;
   }
 
-  if (settings.isOpenOverride === false) {
+  // If Admin Force Closed -> ALWAYS CLOSED regardless of schedule
+  if (override === false) {
     return {
       isOpen: false,
       statusText: "CURRENTLY CLOSED",
@@ -43,7 +45,17 @@ export function checkRestaurantOpen(
     };
   }
 
-  // 2. Schedule-based check
+  // If Admin Force Open -> ALWAYS OPEN regardless of schedule
+  if (override === true) {
+    return {
+      isOpen: true,
+      statusText: "OPEN NOW",
+      statusDetail: "Open for online orders",
+      badgeType: "open",
+    };
+  }
+
+  // 2. AUTOMATIC DAILY SCHEDULE (Priority #2 - only when override === null)
   const hoursList = settings.openingHours || [];
   if (hoursList.length === 0) {
     return {
@@ -54,7 +66,7 @@ export function checkRestaurantOpen(
     };
   }
 
-  const currentDayOfWeek = currentDate.getDay(); // 0 = Sunday, 1 = Monday, ...
+  const currentDayOfWeek = currentDate.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
   const currentHours = String(currentDate.getHours()).padStart(2, "0");
   const currentMinutes = String(currentDate.getMinutes()).padStart(2, "0");
   const currentTimeStr = `${currentHours}:${currentMinutes}`;

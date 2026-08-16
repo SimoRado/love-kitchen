@@ -18,17 +18,46 @@ model Category {
 }
 
 model Product {
-  id          String      @id @default(cuid())
-  name        String
-  description String?
-  price       Float
-  image       String?
-  available   Boolean     @default(true)
-  categoryId  String
-  category    Category    @relation(fields: [categoryId], references: [id])
-  orderItems  OrderItem[]
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id             String                 @id @default(cuid())
+  name           String
+  description    String?
+  price          Float
+  image          String?
+  available      Boolean                @default(true)
+  categoryId     String
+  category       Category               @relation(fields: [categoryId], references: [id])
+  modifierGroups ProductModifierGroup[]
+  orderItems     OrderItem[]
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+}
+
+model ProductModifierGroup {
+  id            String                  @id @default(cuid())
+  productId     String
+  product       Product                 @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name          String
+  description   String?
+  required      Boolean                 @default(false)
+  minSelections Int                     @default(0)
+  maxSelections Int                     @default(1)
+  displayOrder  Int                     @default(0)
+  active        Boolean                 @default(true)
+  options       ProductModifierOption[]
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+}
+
+model ProductModifierOption {
+  id              String               @id @default(cuid())
+  modifierGroupId String
+  modifierGroup   ProductModifierGroup @relation(fields: [modifierGroupId], references: [id], onDelete: Cascade)
+  name            String
+  priceDelta      Float                @default(0)
+  active          Boolean              @default(true)
+  displayOrder    Int                  @default(0)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
 }
 
 model Order {
@@ -49,14 +78,26 @@ model Order {
 }
 
 model OrderItem {
-  id          String   @id @default(cuid())
-  orderId     String
-  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  productId   String?
-  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
-  productName String
-  price       Float
-  quantity    Int      @default(1)
+  id                  String              @id @default(cuid())
+  orderId             String
+  order               Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId           String?
+  product             Product?            @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productName         String
+  price               Float               // Base product price at time of ordering
+  configuredUnitPrice Float?              // Final unit price (base price + sum of modifier priceDeltas)
+  quantity            Int                 @default(1)
+  modifiers           OrderItemModifier[]
+}
+
+model OrderItemModifier {
+  id                 String    @id @default(cuid())
+  orderItemId        String
+  orderItem          OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  modifierGroupName  String
+  modifierOptionName String
+  priceDelta         Float     @default(0)
+  createdAt          DateTime  @default(now())
 }
 
 model RestaurantSettings {

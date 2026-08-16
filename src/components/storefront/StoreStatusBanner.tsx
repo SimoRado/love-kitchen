@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Clock, Phone, MapPin, AlertCircle, CheckCircle2, Bike } from "lucide-react";
+import { Clock, Phone, MapPin, AlertCircle, Bike } from "lucide-react";
 import { RestaurantSettings } from "@/lib/types";
 import { RestaurantOpenStatus } from "@/lib/openingHoursHelper";
 import { formatCurrency } from "@/lib/formatters";
@@ -19,16 +19,16 @@ export default function StoreStatusBanner({
 
   return (
     <div id="restaurant-info" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-6 sm:-mt-8 relative z-10 mb-8">
-      <div className="bg-white rounded-2xl border border-[#EBE3D5] shadow-md p-4 sm:p-6">
+      <div className="bg-white rounded-2xl border border-[#EBE3D5] shadow-sm p-4 sm:p-6">
         {/* Closed Warning Banner if restaurant is closed */}
         {!openStatus.isOpen && (
-          <div className="mb-4 p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3 text-amber-900">
+          <div className="mb-4 p-3.5 bg-amber-50/80 border border-amber-200 rounded-xl flex items-start gap-3 text-amber-900">
             <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
             <div className="text-xs">
-              <p className="font-bold text-amber-950">
+              <p className="font-semibold text-amber-950">
                 The restaurant is currently closed for online ordering.
               </p>
-              <p className="text-amber-800 mt-0.5">
+              <p className="text-amber-800 font-normal mt-0.5">
                 You are welcome to browse our complete menu and prices. {openStatus.statusDetail}.
               </p>
             </div>
@@ -50,14 +50,14 @@ export default function StoreStatusBanner({
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <span
-                  className={`text-xs font-black uppercase tracking-wider ${
+                  className={`text-xs font-semibold uppercase tracking-wider ${
                     openStatus.isOpen ? "text-emerald-700" : "text-amber-700"
                   }`}
                 >
                   {openStatus.statusText}
                 </span>
               </div>
-              <p className="text-xs text-slate-500 font-medium truncate mt-0.5">
+              <p className="text-xs text-slate-500 font-normal truncate mt-0.5">
                 {openStatus.statusDetail}
               </p>
             </div>
@@ -69,10 +69,10 @@ export default function StoreStatusBanner({
               <Bike className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-bold text-slate-900">
+              <p className="text-xs font-semibold text-slate-800">
                 Delivery Fee: {formatCurrency(settings.deliveryFee ?? 15, settings.currency)}
               </p>
-              <p className="text-xs text-slate-500 font-medium truncate mt-0.5">
+              <p className="text-xs text-slate-500 font-normal truncate mt-0.5">
                 Pickup is always Free
               </p>
             </div>
@@ -84,10 +84,10 @@ export default function StoreStatusBanner({
               <Phone className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-bold text-slate-900">Direct Contact</p>
+              <p className="text-xs font-semibold text-slate-800">Direct Contact</p>
               <a
                 href={`tel:${settings.phone}`}
-                className="text-xs text-primary font-semibold hover:underline truncate block mt-0.5"
+                className="text-xs text-primary font-medium hover:underline truncate block mt-0.5"
               >
                 {settings.phone}
               </a>
@@ -100,8 +100,8 @@ export default function StoreStatusBanner({
               <MapPin className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-bold text-slate-900">Restaurant Location</p>
-              <p className="text-xs text-slate-500 font-medium line-clamp-1 mt-0.5">
+              <p className="text-xs font-semibold text-slate-800">Restaurant Location</p>
+              <p className="text-xs text-slate-500 font-normal line-clamp-1 mt-0.5">
                 {settings.address}
               </p>
             </div>

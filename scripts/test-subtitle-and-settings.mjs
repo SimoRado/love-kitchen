@@ -6,7 +6,7 @@ async function runSubtitleTests() {
   const loginRes = await fetch(`${baseUrl}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ password: "admin_secret_password_2026" }),
+    body: JSON.stringify({ password: "123" }),
   });
   if (!loginRes.ok) throw new Error("Admin login failed");
   const cookies = loginRes.headers.get("set-cookie");

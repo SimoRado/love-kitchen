@@ -137,7 +137,7 @@ export default function StorefrontPage() {
 
       {/* 5. Main Content: 70% Menu / 30% Sticky Cart Layout */}
       <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
           {/* Left Column: Menu Items Grid (70% on desktop) */}
           <div className="lg:col-span-8 space-y-8">
             <MenuGrid
@@ -150,7 +150,7 @@ export default function StorefrontPage() {
           </div>
 
           {/* Right Column: Sticky Cart Sidebar (30% on desktop) */}
-          <div className="hidden lg:block lg:col-span-4">
+          <div className="hidden lg:block lg:col-span-4 relative">
             <CartSidebar
               currency={currency}
               isRestaurantOpen={openStatus.isOpen}

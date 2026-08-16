@@ -82,7 +82,7 @@ export default function CheckoutPage() {
   const settingsDeliveryFee = settings?.deliveryFee ?? 15;
 
   const { subtotal, deliveryFee, total } = calculateOrderTotals(
-    items.map((it) => ({ price: it.product.price, quantity: it.quantity })),
+    items.map((it) => ({ price: it.configuredUnitPrice, quantity: it.quantity })),
     orderType,
     settingsDeliveryFee
   );
@@ -128,7 +128,7 @@ export default function CheckoutPage() {
 
     if (hasUnavailable) {
       setErrorMessage(
-        "One or more items in your cart are currently sold out. Please remove them to proceed."
+        "One or more items in your cart are currently sold out or have unavailable options. Please update them to proceed."
       );
       return;
     }
@@ -153,6 +153,7 @@ export default function CheckoutPage() {
         items: items.map((it) => ({
           productId: it.product.id,
           quantity: it.quantity,
+          selectedModifierOptionIds: (it.selectedModifiers || []).map((m) => m.optionId),
         })),
       };
 
@@ -196,17 +197,17 @@ export default function CheckoutPage() {
   if (items.length === 0 && !isSubmitting) {
     return (
       <div className="min-h-screen bg-[#FFFDF9] flex flex-col justify-center items-center p-6 text-center">
-        <div className="max-w-md bg-white rounded-2xl border border-[#EBE3D5] p-8 shadow-sm">
+        <div className="max-w-md bg-white rounded-2xl border border-[#EBE3D5] p-8 shadow-xs">
           <ShoppingBag className="w-12 h-12 text-slate-300 mx-auto mb-3" />
           <h2 className="text-lg font-bold text-slate-900 font-serif">
             Your Cart is Empty
           </h2>
-          <p className="text-xs text-slate-500 mt-1 mb-6">
+          <p className="text-xs text-slate-500 font-normal mt-1 mb-6">
             You don&apos;t have any dishes in your cart to checkout.
           </p>
           <Link
             href="/"
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold shadow-xs transition-colors"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-medium shadow-xs transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Return to Menu</span>
@@ -223,13 +224,13 @@ export default function CheckoutPage() {
         <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <Link
             href="/"
-            className="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-primary transition-colors"
+            className="inline-flex items-center gap-2 text-xs font-medium text-slate-600 hover:text-primary transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Back to Menu</span>
           </Link>
 
-          <span className="font-extrabold text-base text-slate-900 font-serif">
+          <span className="font-bold text-base text-slate-900 font-serif">
             {settings?.name || "Love Kitchen"} • Checkout
           </span>
 
@@ -241,13 +242,13 @@ export default function CheckoutPage() {
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-8 sm:py-12">
         {/* Closed Restaurant Alert */}
         {!openStatus.isOpen && (
-          <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3 text-amber-900">
+          <div className="mb-6 p-4 bg-amber-50/80 border border-amber-200 rounded-2xl flex items-start gap-3 text-amber-900">
             <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
             <div className="text-xs">
-              <p className="font-bold text-amber-950">
+              <p className="font-semibold text-amber-950">
                 The restaurant is currently closed.
               </p>
-              <p className="text-amber-800 mt-0.5">
+              <p className="text-amber-800 font-normal mt-0.5">
                 Orders cannot be placed right now. {openStatus.statusDetail}.
               </p>
             </div>
@@ -259,10 +260,10 @@ export default function CheckoutPage() {
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-3 text-red-900">
             <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
             <div className="text-xs">
-              <p className="font-bold text-red-950">
+              <p className="font-semibold text-red-950">
                 Sold Out item in your cart
               </p>
-              <p className="text-red-800 mt-0.5">
+              <p className="text-red-800 font-normal mt-0.5">
                 One or more dishes in your cart are no longer available. Please return to the menu and remove them to complete your order.
               </p>
             </div>
@@ -273,7 +274,7 @@ export default function CheckoutPage() {
         {errorMessage && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-3 text-red-900">
             <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-            <p className="text-xs font-semibold text-red-800">{errorMessage}</p>
+            <p className="text-xs font-medium text-red-800">{errorMessage}</p>
           </div>
         )}
 
@@ -282,7 +283,7 @@ export default function CheckoutPage() {
           <div className="lg:col-span-7 space-y-6">
             {/* 1. Fulfillment Type Selection */}
             <div className="bg-white rounded-2xl border border-[#EBE3D5] p-5 sm:p-6 shadow-xs space-y-4">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-700">
                 1. Order Fulfillment
               </h2>
 
@@ -310,8 +311,8 @@ export default function CheckoutPage() {
                     )}
                   </div>
                   <div className="mt-3">
-                    <p className="text-xs font-bold text-slate-900">Delivery</p>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
+                    <p className="text-xs font-semibold text-slate-900">Delivery</p>
+                    <p className="text-[11px] text-slate-500 font-normal mt-0.5">
                       Fee: {formatCurrency(settingsDeliveryFee, currency)}
                     </p>
                   </div>
@@ -340,8 +341,8 @@ export default function CheckoutPage() {
                     )}
                   </div>
                   <div className="mt-3">
-                    <p className="text-xs font-bold text-slate-900">Pickup</p>
-                    <p className="text-[11px] text-emerald-600 font-semibold mt-0.5">
+                    <p className="text-xs font-semibold text-slate-900">Pickup</p>
+                    <p className="text-[11px] text-emerald-600 font-medium mt-0.5">
                       Free (0.00)
                     </p>
                   </div>
@@ -351,14 +352,14 @@ export default function CheckoutPage() {
 
             {/* 2. Customer Contact Information */}
             <div className="bg-white rounded-2xl border border-[#EBE3D5] p-5 sm:p-6 shadow-xs space-y-4">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-700">
                 2. Customer Information
               </h2>
 
               <div className="space-y-4">
                 {/* Name */}
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
+                  <label className="block text-xs font-medium uppercase tracking-wider text-slate-600 mb-1.5">
                     Your Full Name <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
@@ -385,7 +386,7 @@ export default function CheckoutPage() {
 
                 {/* Phone */}
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
+                  <label className="block text-xs font-medium uppercase tracking-wider text-slate-600 mb-1.5">
                     Phone Number <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
@@ -413,7 +414,7 @@ export default function CheckoutPage() {
                 {/* Delivery Address (only for Delivery) */}
                 {orderType === "DELIVERY" && (
                   <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
+                    <label className="block text-xs font-medium uppercase tracking-wider text-slate-600 mb-1.5">
                       Delivery Street Address <span className="text-red-500">*</span>
                     </label>
                     <div className="relative">
@@ -441,7 +442,7 @@ export default function CheckoutPage() {
 
                 {/* Order Notes */}
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
+                  <label className="block text-xs font-medium uppercase tracking-wider text-slate-600 mb-1.5">
                     Special Instructions / Notes (Optional)
                   </label>
                   <div className="relative">
@@ -461,55 +462,85 @@ export default function CheckoutPage() {
 
           {/* Right Column: Order Summary & Placement (5 cols) */}
           <div className="lg:col-span-5 space-y-5">
-            <div className="bg-white rounded-2xl border border-[#EBE3D5] p-5 sm:p-6 shadow-sm space-y-4 sticky top-24">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700 pb-3 border-b border-slate-100">
+            <div className="bg-white rounded-2xl border border-[#EBE3D5] p-5 sm:p-6 shadow-xs space-y-4 sticky top-24">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-700 pb-3 border-b border-slate-100">
                 Order Summary
               </h2>
 
               {/* Items List */}
-              <div className="divide-y divide-slate-100 max-h-60 overflow-y-auto space-y-2 py-1">
-                {items.map(({ product, quantity }) => (
-                  <div
-                    key={product.id}
-                    className="pt-2 first:pt-0 flex items-start justify-between text-xs gap-2"
-                  >
-                    <div>
-                      <span className="font-bold text-slate-900">
-                        {quantity}× {product.name}
-                      </span>
-                      <span className="block text-[11px] text-slate-400">
-                        {formatCurrency(product.price, currency)} each
+              <div className="divide-y divide-slate-100 max-h-60 overflow-y-auto space-y-2.5 py-1">
+                {items.map((item) => {
+                  const { product, quantity, selectedModifiers = [], configuredUnitPrice } = item;
+                  const itemTotal = configuredUnitPrice * quantity;
+
+                  const groupedModifiers: { [groupName: string]: string[] } = {};
+                  for (const mod of selectedModifiers) {
+                    if (!groupedModifiers[mod.groupName]) {
+                      groupedModifiers[mod.groupName] = [];
+                    }
+                    groupedModifiers[mod.groupName].push(
+                      `${mod.optionName}${
+                        mod.priceDelta > 0
+                          ? ` (+${formatCurrency(mod.priceDelta, currency)})`
+                          : ""
+                      }`
+                    );
+                  }
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="pt-2.5 first:pt-0 flex items-start justify-between text-xs gap-2"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <span className="font-semibold text-slate-800">
+                          {quantity}× {product.name}
+                        </span>
+                        <span className="block text-[11px] text-slate-500 font-normal">
+                          {formatCurrency(configuredUnitPrice, currency)} each
+                        </span>
+
+                        {selectedModifiers.length > 0 && (
+                          <div className="mt-1 space-y-0.5 text-[11px] text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                            {Object.entries(groupedModifiers).map(([groupName, optionsList]) => (
+                              <p key={groupName} className="leading-snug">
+                                <span className="font-medium text-slate-700">{groupName}: </span>
+                                <span className="text-slate-600 font-normal">{optionsList.join(", ")}</span>
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <span className="font-semibold text-slate-900 shrink-0">
+                        {formatCurrency(itemTotal, currency)}
                       </span>
                     </div>
-
-                    <span className="font-bold text-slate-900 shrink-0">
-                      {formatCurrency(product.price * quantity, currency)}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Pricing Breakdown */}
               <div className="pt-3 border-t border-slate-100 space-y-2 text-xs">
                 <div className="flex justify-between text-slate-600">
                   <span>Subtotal</span>
-                  <span className="font-bold text-slate-900">
+                  <span className="font-semibold text-slate-900">
                     {formatCurrency(subtotal, currency)}
                   </span>
                 </div>
 
                 <div className="flex justify-between text-slate-600">
                   <span>Delivery ({orderType === "DELIVERY" ? "Standard" : "Pickup"})</span>
-                  <span className="font-bold text-slate-900">
+                  <span className="font-semibold text-slate-900">
                     {orderType === "DELIVERY"
                       ? formatCurrency(deliveryFee, currency)
                       : "Free (0.00)"}
                   </span>
                 </div>
 
-                <div className="flex justify-between text-sm font-black text-slate-900 pt-3 border-t border-slate-200">
+                <div className="flex justify-between text-sm font-semibold text-slate-900 pt-3 border-t border-slate-200">
                   <span>Total Amount</span>
-                  <span className="text-primary font-black text-lg">
+                  <span className="text-primary font-semibold text-base">
                     {formatCurrency(total, currency)}
                   </span>
                 </div>
@@ -519,7 +550,7 @@ export default function CheckoutPage() {
               <button
                 type="submit"
                 disabled={isSubmitting || !openStatus.isOpen || hasUnavailable}
-                className={`w-full flex items-center justify-center gap-2 py-3.5 px-5 rounded-xl font-bold text-xs uppercase tracking-wider shadow-md transition-all text-white cursor-pointer ${
+                className={`w-full flex items-center justify-center gap-2 py-3 px-5 rounded-xl font-medium text-xs uppercase tracking-wider shadow-xs transition-all text-white cursor-pointer ${
                   isSubmitting || !openStatus.isOpen || hasUnavailable
                     ? "bg-slate-300 cursor-not-allowed opacity-70"
                     : "bg-primary hover:bg-primary-hover active:scale-98"
@@ -539,7 +570,7 @@ export default function CheckoutPage() {
                 )}
               </button>
 
-              <p className="text-[11px] text-slate-400 text-center">
+              <p className="text-[11px] text-slate-400 font-normal text-center">
                 Payment is made upon delivery / pickup.
               </p>
             </div>

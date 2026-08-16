@@ -78,7 +78,11 @@ export async function GET(request: NextRequest) {
           createdAt: "desc",
         },
         include: {
-          items: true,
+          items: {
+            include: {
+              modifiers: true,
+            },
+          },
         },
       }),
     ]);

@@ -13,8 +13,10 @@ import {
   UtensilsCrossed,
   Image as ImageIcon,
   Loader2,
+  Sparkles,
 } from "lucide-react";
 import ProductModal from "@/components/ProductModal";
+import ProductModifiersModal from "@/components/admin/ProductModifiersModal";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import LoadingState from "@/components/LoadingState";
 import EmptyState from "@/components/EmptyState";
@@ -37,6 +39,7 @@ export default function ProductsPage() {
   // Modals state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [selectedModifierProduct, setSelectedModifierProduct] = useState<Product | null>(null);
 
   // Delete confirmation
   const [deleteProductTarget, setDeleteProductTarget] = useState<Product | null>(null);
@@ -403,13 +406,28 @@ export default function ProductsPage() {
                       {/* Actions */}
                       <td className="py-3.5 px-5 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          {/* Modifiers Button */}
+                          <button
+                            onClick={() => setSelectedModifierProduct(product)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-border bg-surface hover:bg-surface-hover text-text-main text-xs font-medium transition-colors cursor-pointer mr-1"
+                            title="Manage add-ons and modifiers"
+                          >
+                            <Sparkles className="w-3.5 h-3.5 text-primary" />
+                            <span>Modifiers</span>
+                            {product.modifierGroups && product.modifierGroups.length > 0 && (
+                              <span className="bg-primary/10 text-primary text-[10px] font-bold px-1.5 py-0.2 rounded-full">
+                                {product.modifierGroups.length}
+                              </span>
+                            )}
+                          </button>
+
                           {/* Edit Button */}
                           <button
                             onClick={() => {
                               setEditingProduct(product);
                               setIsModalOpen(true);
                             }}
-                            className="p-1.5 rounded-lg text-text-muted hover:text-text-main hover:bg-surface-hover transition-colors"
+                            className="p-1.5 rounded-lg text-text-muted hover:text-text-main hover:bg-surface-hover transition-colors cursor-pointer"
                             title="Edit product"
                           >
                             <Edit2 className="w-4 h-4" />
@@ -418,7 +436,7 @@ export default function ProductsPage() {
                           {/* Delete Button */}
                           <button
                             onClick={() => setDeleteProductTarget(product)}
-                            className="p-1.5 rounded-lg text-text-muted hover:text-red-600 hover:bg-red-50 transition-colors"
+                            className="p-1.5 rounded-lg text-text-muted hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
                             title="Delete product"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -451,6 +469,14 @@ export default function ProductsPage() {
           setEditingProduct(null);
         }}
         onSuccess={handleSaveSuccess}
+      />
+
+      {/* Product Modifiers Modal */}
+      <ProductModifiersModal
+        isOpen={Boolean(selectedModifierProduct)}
+        product={selectedModifierProduct}
+        onClose={() => setSelectedModifierProduct(null)}
+        onModifiersUpdated={fetchData}
       />
 
       {/* Delete Confirmation Dialog */}

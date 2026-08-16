@@ -40,6 +40,16 @@ export async function GET(request: NextRequest) {
       where: whereClause,
       include: {
         category: true,
+        modifierGroups: {
+          where: { active: true },
+          include: {
+            options: {
+              where: { active: true },
+              orderBy: { displayOrder: "asc" },
+            },
+          },
+          orderBy: { displayOrder: "asc" },
+        },
       },
       orderBy: {
         createdAt: "desc",
@@ -48,6 +58,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ success: true, data: products });
   } catch (error) {
+    import("node:fs").then((fs) => {
+      fs.writeFileSync("debug-error.log", String((error as any)?.stack || error));
+    });
     console.error("Error fetching products:", error);
     return NextResponse.json(
       { success: false, error: "Failed to fetch products" },

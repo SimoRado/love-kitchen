@@ -52,12 +52,12 @@ export default function MenuGrid({
       {/* Menu Header with Live Search */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight font-serif">
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight font-serif">
             {activeCategoryId === "ALL"
               ? "Our Full Menu"
               : activeCategories.find((c) => c.id === activeCategoryId)?.name || "Menu Section"}
           </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-slate-500 font-normal mt-0.5">
             {filteredProducts.length} {filteredProducts.length === 1 ? "dish" : "dishes"} available to explore
           </p>
         </div>
@@ -89,10 +89,10 @@ export default function MenuGrid({
           <div className="w-12 h-12 rounded-full bg-orange-50 text-primary flex items-center justify-center mx-auto mb-3">
             <UtensilsCrossed className="w-6 h-6" />
           </div>
-          <h3 className="text-base font-bold text-slate-800">
+          <h3 className="text-base font-semibold text-slate-800">
             No dishes found
           </h3>
-          <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+          <p className="text-xs text-slate-500 font-normal mt-1 max-w-sm mx-auto">
             {searchQuery
               ? `No dishes match "${searchQuery}". Try searching for another ingredient or reset your search.`
               : "There are currently no items listed in this category."}
@@ -100,7 +100,7 @@ export default function MenuGrid({
           {searchQuery && (
             <button
               onClick={() => setSearchQuery("")}
-              className="mt-4 px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold shadow-xs hover:bg-primary-hover transition-colors"
+              className="mt-4 px-4 py-2 rounded-xl bg-primary text-white text-xs font-medium shadow-xs hover:bg-primary-hover transition-colors"
             >
               Clear Search
             </button>

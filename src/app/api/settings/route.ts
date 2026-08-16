@@ -13,6 +13,18 @@ const DEFAULT_DAYS = [
   { dayOfWeek: 0, dayName: "Sunday", openTime: "12:00", closeTime: "23:00", isClosed: false },
 ];
 
+function normalizeOverrideFromDb(raw: any): boolean | null {
+  if (raw === 1 || raw === true || raw === "1" || raw === "true") return true;
+  if (raw === 0 || raw === false || raw === "0" || raw === "false") return false;
+  return null;
+}
+
+function normalizeOverrideToDb(raw: any): number | null {
+  if (raw === true || raw === 1 || raw === "true" || raw === "1") return 1;
+  if (raw === false || raw === 0 || raw === "false" || raw === "0") return 0;
+  return null;
+}
+
 export async function GET() {
   try {
     const rawSettings = await prisma.$queryRawUnsafe<
@@ -24,7 +36,7 @@ export async function GET() {
         address: string;
         currency: string;
         deliveryFee: number;
-        isOpenOverride: boolean | number | null;
+        isOpenOverride: boolean | number | string | null;
         isAutoHours: boolean | number;
       }>
     >('SELECT * FROM "RestaurantSettings" WHERE "id" = "default" LIMIT 1');
@@ -65,10 +77,7 @@ export async function GET() {
       orderBy: { dayOfWeek: "asc" },
     });
 
-    const parsedIsOpenOverride =
-      settings.isOpenOverride === null || settings.isOpenOverride === undefined
-        ? null
-        : Boolean(settings.isOpenOverride);
+    const parsedIsOpenOverride = normalizeOverrideFromDb(settings.isOpenOverride);
 
     // Return public-safe settings data only
     const publicSettings = {
@@ -112,34 +121,39 @@ export async function PUT(request: NextRequest) {
       openingHours,
     } = body;
 
-    if (!name || typeof name !== "string" || name.trim() === "") {
-      return NextResponse.json(
-        { success: false, error: "Restaurant name is required" },
-        { status: 400 }
-      );
-    }
-
-    const sanitizedSubtitle =
-      subtitle !== undefined && subtitle !== null && typeof subtitle === "string"
-        ? subtitle.trim() || null
-        : null;
-
-    const numericDeliveryFee =
-      deliveryFee !== undefined && deliveryFee !== null
-        ? roundMoney(Math.max(0, Number(deliveryFee)))
-        : 15;
-
     // Load existing
     const rawExisting = await prisma.$queryRawUnsafe<any[]>(
       'SELECT * FROM "RestaurantSettings" WHERE "id" = "default" LIMIT 1'
     );
     const existing = rawExisting && rawExisting.length > 0 ? rawExisting[0] : null;
 
-    const effectivePhone = phone !== undefined ? phone.trim() : (existing?.phone ?? "");
-    const effectiveAddress = address !== undefined ? address.trim() : (existing?.address ?? "");
+    const effectiveName =
+      name !== undefined && typeof name === "string" && name.trim() !== ""
+        ? name.trim()
+        : existing?.name ?? "Love Kitchen";
+
+    const sanitizedSubtitle =
+      subtitle !== undefined
+        ? subtitle !== null && typeof subtitle === "string" && subtitle.trim() !== ""
+          ? subtitle.trim()
+          : null
+        : (existing?.subtitle ?? null);
+
+    const numericDeliveryFee =
+      deliveryFee !== undefined && deliveryFee !== null
+        ? roundMoney(Math.max(0, Number(deliveryFee)))
+        : Number(existing?.deliveryFee ?? 15);
+
+    const effectivePhone = phone !== undefined ? phone.trim() : (existing?.phone ?? "+212 522 123456");
+    const effectiveAddress = address !== undefined ? address.trim() : (existing?.address ?? "72 Boulevard Massira Khadra, Casablanca");
     const effectiveCurrency = currency !== undefined ? currency.trim() : (existing?.currency ?? "MAD");
+    
+    // Normalize override input: true => 1, false => 0, null => NULL
     const effectiveIsOpenOverride =
-      isOpenOverride === undefined ? existing?.isOpenOverride : isOpenOverride;
+      isOpenOverride === undefined
+        ? normalizeOverrideToDb(existing?.isOpenOverride)
+        : normalizeOverrideToDb(isOpenOverride);
+
     const effectiveIsAutoHours =
       isAutoHours !== undefined ? (isAutoHours ? 1 : 0) : (existing?.isAutoHours ?? 1);
 
@@ -147,7 +161,7 @@ export async function PUT(request: NextRequest) {
       await prisma.$executeRawUnsafe(
         `INSERT INTO "RestaurantSettings" ("id", "name", "subtitle", "phone", "address", "currency", "deliveryFee", "isOpenOverride", "isAutoHours", "createdAt", "updatedAt") 
          VALUES ('default', ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-        name.trim(),
+        effectiveName,
         sanitizedSubtitle,
         effectivePhone,
         effectiveAddress,
@@ -161,7 +175,7 @@ export async function PUT(request: NextRequest) {
         `UPDATE "RestaurantSettings" 
          SET "name" = ?, "subtitle" = ?, "phone" = ?, "address" = ?, "currency" = ?, "deliveryFee" = ?, "isOpenOverride" = ?, "isAutoHours" = ?, "updatedAt" = CURRENT_TIMESTAMP 
          WHERE "id" = 'default'`,
-        name.trim(),
+        effectiveName,
         sanitizedSubtitle,
         effectivePhone,
         effectiveAddress,
@@ -217,10 +231,7 @@ export async function PUT(request: NextRequest) {
       orderBy: { dayOfWeek: "asc" },
     });
 
-    const parsedIsOpenOverride =
-      updated.isOpenOverride === null || updated.isOpenOverride === undefined
-        ? null
-        : Boolean(updated.isOpenOverride);
+    const parsedIsOpenOverride = normalizeOverrideFromDb(updated.isOpenOverride);
 
     const updatedSettings = {
       id: updated.id,

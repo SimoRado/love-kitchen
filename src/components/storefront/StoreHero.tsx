@@ -70,7 +70,7 @@ export default function StoreHero({
                 <img
                   src="https://images.unsplash.com/photo-1550547660-d9450f859349?w=900&auto=format&fit=crop&q=80"
                   alt="Delicious gourmet burger and sides"
-                  className="w-full h-full object-cover transform hover:scale-105 transition-transform duration-700 ease-out"
+                  className="w-full h-full object-cover"
                 />
               </div>
             </div>

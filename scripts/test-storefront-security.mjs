@@ -37,7 +37,7 @@ async function runSuite() {
   const goodLogin = await fetch(`${baseUrl}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ password: "admin_secret_password_2026" }),
+    body: JSON.stringify({ password: "123" }),
   });
   console.log(`🔑 Login with valid password: ${goodLogin.status} (Expected 200)`);
   const cookies = goodLogin.headers.get("set-cookie");
@@ -79,8 +79,11 @@ async function runSuite() {
 
   const freshProdRes = await fetch(`${baseUrl}/api/products`);
   const freshProdData = await freshProdRes.json();
-  const testProduct1 = freshProdData.data[0];
-  const testProduct2 = freshProdData.data[1];
+  const simpleProducts = freshProdData.data.filter(
+    (p) => !p.modifierGroups || p.modifierGroups.length === 0
+  );
+  const testProduct1 = simpleProducts[0] || freshProdData.data[0];
+  const testProduct2 = simpleProducts[1] || freshProdData.data[1];
 
   const orderPayload = {
     customerName: "Kenza Tazi",
