@@ -73,7 +73,7 @@ export async function GET() {
   } catch (error) {
     console.error("Error fetching restaurant settings:", error);
     return NextResponse.json(
-      { success: false, error: (error as Error)?.message || "Failed to fetch settings" },
+      { success: false, error: "Failed to fetch settings" },
       { status: 500 }
     );
   }
@@ -85,6 +85,9 @@ export async function PUT(request: NextRequest) {
 
   try {
     const body = await request.json();
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return NextResponse.json({ success: false, error: "Invalid settings request." }, { status: 400 });
+    }
     const {
       name,
       subtitle,
@@ -98,6 +101,62 @@ export async function PUT(request: NextRequest) {
       isAutoHours,
       openingHours,
     } = body;
+
+    const textFields: Array<[string, unknown, number]> = [
+      ["Restaurant name", name, 100],
+      ["Subtitle", subtitle, 200],
+      ["Phone", phone, 30],
+      ["Address", address, 500],
+      ["Currency", currency, 10],
+      ["Google Maps URL", googleMapsUrl, 2_000],
+      ["WhatsApp number", whatsappNumber, 30],
+    ];
+    for (const [label, value, maxLength] of textFields) {
+      if (value !== undefined && value !== null && (typeof value !== "string" || value.length > maxLength)) {
+        return NextResponse.json({ success: false, error: `${label} is invalid.` }, { status: 400 });
+      }
+    }
+    for (const [label, value] of [["Google Maps URL", googleMapsUrl]] as const) {
+      if (typeof value === "string" && value.trim()) {
+        try {
+          const parsed = new URL(value);
+          if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new Error();
+        } catch {
+          return NextResponse.json({ success: false, error: `${label} must be a valid HTTP(S) URL.` }, { status: 400 });
+        }
+      }
+    }
+    if (deliveryFee !== undefined) {
+      const fee = Number(deliveryFee);
+      if (!Number.isFinite(fee) || fee < 0 || fee > 10_000) {
+        return NextResponse.json({ success: false, error: "Delivery fee must be a valid non-negative amount." }, { status: 400 });
+      }
+    }
+    if (isOpenOverride !== undefined && isOpenOverride !== null && typeof isOpenOverride !== "boolean") {
+      return NextResponse.json({ success: false, error: "Open/closed override must be true, false, or automatic." }, { status: 400 });
+    }
+    if (isAutoHours !== undefined && typeof isAutoHours !== "boolean") {
+      return NextResponse.json({ success: false, error: "Automatic hours value is invalid." }, { status: 400 });
+    }
+    if (openingHours !== undefined) {
+      if (!Array.isArray(openingHours) || openingHours.length > 7) {
+        return NextResponse.json({ success: false, error: "Opening hours must contain at most seven days." }, { status: 400 });
+      }
+      const days = new Set<number>();
+      for (const hour of openingHours) {
+        if (
+          !hour || typeof hour !== "object" ||
+          !Number.isInteger(hour.dayOfWeek) || hour.dayOfWeek < 0 || hour.dayOfWeek > 6 ||
+          days.has(hour.dayOfWeek) ||
+          typeof hour.openTime !== "string" || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(hour.openTime) ||
+          typeof hour.closeTime !== "string" || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(hour.closeTime) ||
+          typeof hour.isClosed !== "boolean"
+        ) {
+          return NextResponse.json({ success: false, error: "One or more opening-hour entries are invalid." }, { status: 400 });
+        }
+        days.add(hour.dayOfWeek);
+      }
+    }
 
     const existing = await prisma.restaurantSettings.findUnique({
       where: { id: "default" },
@@ -152,73 +211,54 @@ export async function PUT(request: NextRequest) {
     const effectiveIsAutoHours =
       isAutoHours !== undefined ? Boolean(isAutoHours) : (existing?.isAutoHours ?? true);
 
-    const updated = await prisma.restaurantSettings.upsert({
-      where: { id: "default" },
-      create: {
-        id: "default",
-        name: effectiveName,
-        subtitle: sanitizedSubtitle,
-        phone: effectivePhone,
-        address: effectiveAddress,
-        googleMapsUrl: sanitizedGoogleMapsUrl,
-        whatsappNumber: sanitizedWhatsappNumber,
-        currency: effectiveCurrency,
-        deliveryFee: numericDeliveryFee,
-        isOpenOverride: effectiveIsOpenOverride,
-        isAutoHours: effectiveIsAutoHours,
-      },
-      update: {
-        name: effectiveName,
-        subtitle: sanitizedSubtitle,
-        phone: effectivePhone,
-        address: effectiveAddress,
-        googleMapsUrl: sanitizedGoogleMapsUrl,
-        whatsappNumber: sanitizedWhatsappNumber,
-        currency: effectiveCurrency,
-        deliveryFee: numericDeliveryFee,
-        isOpenOverride: effectiveIsOpenOverride,
-        isAutoHours: effectiveIsAutoHours,
-      },
-    });
+    const { updated, updatedOpeningHours } = await prisma.$transaction(async (tx) => {
+      const saved = await tx.restaurantSettings.upsert({
+        where: { id: "default" },
+        create: {
+          id: "default", name: effectiveName, subtitle: sanitizedSubtitle,
+          phone: effectivePhone, address: effectiveAddress,
+          googleMapsUrl: sanitizedGoogleMapsUrl, whatsappNumber: sanitizedWhatsappNumber,
+          currency: effectiveCurrency, deliveryFee: numericDeliveryFee,
+          isOpenOverride: effectiveIsOpenOverride, isAutoHours: effectiveIsAutoHours,
+        },
+        update: {
+          name: effectiveName, subtitle: sanitizedSubtitle,
+          phone: effectivePhone, address: effectiveAddress,
+          googleMapsUrl: sanitizedGoogleMapsUrl, whatsappNumber: sanitizedWhatsappNumber,
+          currency: effectiveCurrency, deliveryFee: numericDeliveryFee,
+          isOpenOverride: effectiveIsOpenOverride, isAutoHours: effectiveIsAutoHours,
+        },
+      });
 
-    // Update opening hours if provided
-    if (Array.isArray(openingHours)) {
-      for (const hour of openingHours) {
-        if (typeof hour.dayOfWeek === "number") {
-          const existingHour = hour.id
-            ? await prisma.openingHour.findUnique({ where: { id: hour.id } })
-            : await prisma.openingHour.findFirst({
-                where: { settingsId: "default", dayOfWeek: hour.dayOfWeek },
-              });
-
+      if (Array.isArray(openingHours)) {
+        for (const hour of openingHours) {
+          const existingHour = await tx.openingHour.findFirst({
+            where: { settingsId: "default", dayOfWeek: hour.dayOfWeek },
+          });
           if (existingHour) {
-            await prisma.openingHour.update({
+            await tx.openingHour.update({
               where: { id: existingHour.id },
-              data: {
-                openTime: hour.openTime || "09:00",
-                closeTime: hour.closeTime || "23:00",
-                isClosed: Boolean(hour.isClosed),
-              },
+              data: { openTime: hour.openTime, closeTime: hour.closeTime, isClosed: hour.isClosed },
             });
           } else {
-            await prisma.openingHour.create({
+            await tx.openingHour.create({
               data: {
                 dayOfWeek: hour.dayOfWeek,
-                dayName: hour.dayName || "",
-                openTime: hour.openTime || "09:00",
-                closeTime: hour.closeTime || "23:00",
-                isClosed: Boolean(hour.isClosed),
+                dayName: typeof hour.dayName === "string" ? hour.dayName.slice(0, 20) : "",
+                openTime: hour.openTime,
+                closeTime: hour.closeTime,
+                isClosed: hour.isClosed,
                 settingsId: "default",
               },
             });
           }
         }
       }
-    }
-
-    const updatedOpeningHours = await prisma.openingHour.findMany({
-      where: { settingsId: "default" },
-      orderBy: { dayOfWeek: "asc" },
+      const savedHours = await tx.openingHour.findMany({
+        where: { settingsId: "default" },
+        orderBy: { dayOfWeek: "asc" },
+      });
+      return { updated: saved, updatedOpeningHours: savedHours };
     });
 
     const updatedSettings = {
@@ -244,7 +284,7 @@ export async function PUT(request: NextRequest) {
   } catch (error) {
     console.error("Error updating restaurant settings:", error);
     return NextResponse.json(
-      { success: false, error: (error as Error)?.message || "Could not update restaurant settings." },
+      { success: false, error: "Could not update restaurant settings." },
       { status: 500 }
     );
   }

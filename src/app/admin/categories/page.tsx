@@ -6,11 +6,6 @@ import {
   Edit2,
   Trash2,
   Tags,
-  AlertTriangle,
-  ArrowUpDown,
-  CheckCircle2,
-  XCircle,
-  RefreshCw,
   FolderTree,
 } from "lucide-react";
 import CategoryModal from "@/components/CategoryModal";
@@ -52,6 +47,7 @@ export default function CategoriesPage() {
   }, [showToast]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load remote admin data after mount
     fetchCategories();
   }, [fetchCategories]);
 

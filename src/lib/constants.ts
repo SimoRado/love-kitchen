@@ -25,7 +25,12 @@ export function getRestaurantMapsUrl(
   if (settings?.googleMapsUrl && typeof settings.googleMapsUrl === "string") {
     const trimmed = settings.googleMapsUrl.trim();
     if (trimmed.length > 0) {
-      return trimmed;
+      try {
+        const url = new URL(trimmed);
+        if (url.protocol === "https:" || url.protocol === "http:") return url.toString();
+      } catch {
+        // Fall through to the encoded address search URL.
+      }
     }
   }
 
@@ -130,4 +135,3 @@ export function hasActiveModifiers(
 ): boolean {
   return getProductActiveModifierGroups(product).length > 0;
 }
-

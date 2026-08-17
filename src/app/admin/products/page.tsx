@@ -7,12 +7,8 @@ import {
   Filter,
   Edit2,
   Trash2,
-  CheckCircle2,
-  XCircle,
-  RefreshCw,
   UtensilsCrossed,
   Image as ImageIcon,
-  Loader2,
   Sparkles,
 } from "lucide-react";
 import ProductModal from "@/components/ProductModal";
@@ -76,6 +72,7 @@ export default function ProductsPage() {
   }, [showToast]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load remote admin data after mount
     fetchData();
   }, [fetchData]);
 

@@ -28,6 +28,7 @@ export default function CategoryModal({
 
   const isEdit = Boolean(category);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- reset the controlled form when its target changes */
   useEffect(() => {
     if (isOpen) {
       if (category) {
@@ -42,6 +43,7 @@ export default function CategoryModal({
       setError("");
     }
   }, [isOpen, category]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   if (!isOpen) return null;
 

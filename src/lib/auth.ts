@@ -6,9 +6,9 @@ function getAdminConfig() {
   const password = process.env.ADMIN_PASSWORD;
   const secret = process.env.ADMIN_SESSION_SECRET;
 
-  if (!password || !secret) {
+  if (!password || !secret || secret.length < 32) {
     throw new Error(
-      "CRITICAL: ADMIN_PASSWORD or ADMIN_SESSION_SECRET is missing from environment variables."
+      "CRITICAL: ADMIN_PASSWORD is missing or ADMIN_SESSION_SECRET is missing/too short."
     );
   }
 
@@ -18,14 +18,21 @@ function getAdminConfig() {
 /**
  * Validate admin password
  */
-export function validateAdminPassword(inputPassword: string): boolean {
-  try {
-    const { password } = getAdminConfig();
-    return Boolean(inputPassword && inputPassword === password);
-  } catch (error) {
-    console.error("Auth configuration error:", error);
-    return false;
+export async function validateAdminPassword(inputPassword: string): Promise<boolean> {
+  const { password, secret } = getAdminConfig();
+  if (!inputPassword) return false;
+  const expected = await createHmacSignature(`admin-password:${password}`, secret);
+  const received = await createHmacSignature(`admin-password:${inputPassword}`, secret);
+  return timingSafeStringEqual(received, expected);
+}
+
+function timingSafeStringEqual(left: string, right: string): boolean {
+  if (left.length !== right.length) return false;
+  let difference = 0;
+  for (let index = 0; index < left.length; index++) {
+    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
   }
+  return difference === 0;
 }
 
 /**
@@ -85,7 +92,7 @@ export async function verifyAdminSessionToken(token: string | null | undefined):
     }
 
     const expectedSignature = await createHmacSignature(`admin-session:${timestamp}`, secret);
-    return signature === expectedSignature;
+    return timingSafeStringEqual(signature, expectedSignature);
   } catch {
     return false;
   }

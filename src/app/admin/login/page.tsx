@@ -2,12 +2,17 @@
 
 import React, { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { Lock, Store, Loader2, ArrowRight, ShieldCheck } from "lucide-react";
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectUrl = searchParams.get("redirect") || "/admin";
+  const requestedRedirect = searchParams.get("redirect");
+  const redirectUrl =
+    requestedRedirect?.startsWith("/admin") && !requestedRedirect.startsWith("//")
+      ? requestedRedirect
+      : "/admin";
 
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -121,12 +126,12 @@ function LoginForm() {
 
         {/* Back to Customer Site */}
         <div className="text-center mt-6">
-          <a
+          <Link
             href="/"
             className="text-xs font-medium text-slate-400 hover:text-white transition-colors"
           >
             ← Return to Customer Storefront
-          </a>
+          </Link>
         </div>
       </div>
     </div>

@@ -3,17 +3,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Search,
-  Filter,
   ShoppingBag,
-  Clock,
-  Phone,
-  MapPin,
   Eye,
   RefreshCw,
-  Truck,
-  CheckCircle2,
-  AlertCircle,
-  ChevronRight,
 } from "lucide-react";
 import OrderStatusBadge from "@/components/OrderStatusBadge";
 import OrderDetailsModal from "@/components/OrderDetailsModal";
@@ -70,6 +62,7 @@ export default function OrdersPage() {
   }, [showToast]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load remote admin data after mount
     fetchOrders();
   }, [fetchOrders]);
 

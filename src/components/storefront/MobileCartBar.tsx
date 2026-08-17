@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ShoppingBag, ArrowRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { useCartStore } from "@/store/useCartStore";
 import { formatCurrency } from "@/lib/formatters";
 

@@ -2,23 +2,17 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import {
-  Settings,
   Store,
   Clock,
   Save,
   Loader2,
   CheckCircle2,
-  AlertCircle,
-  ToggleLeft,
-  ToggleRight,
-  ShieldCheck,
   Building,
   Phone,
   MapPin,
   Coins,
   MessageCircle,
   Navigation,
-  ExternalLink,
 } from "lucide-react";
 import LoadingState from "@/components/LoadingState";
 import { RestaurantSettings, OpeningHour } from "@/lib/types";
@@ -100,6 +94,7 @@ export default function SettingsPage() {
   }, [showToast]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load remote admin data after mount
     fetchSettings();
   }, [fetchSettings]);
 

@@ -58,9 +58,6 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ success: true, data: products });
   } catch (error) {
-    import("node:fs").then((fs) => {
-      fs.writeFileSync("debug-error.log", String((error as any)?.stack || error));
-    });
     console.error("Error fetching products:", error);
     return NextResponse.json(
       { success: false, error: "Failed to fetch products" },
@@ -85,7 +82,7 @@ export async function POST(request: NextRequest) {
     }
 
     const numericPrice = typeof price === "number" ? price : parseFloat(price);
-    if (isNaN(numericPrice) || numericPrice < 0) {
+    if (!Number.isFinite(numericPrice) || numericPrice < 0) {
       return NextResponse.json(
         { success: false, error: "Price must be a valid number greater than or equal to 0" },
         { status: 400 }
@@ -97,6 +94,13 @@ export async function POST(request: NextRequest) {
         { success: false, error: "Category is required" },
         { status: 400 }
       );
+    }
+
+    if (description !== undefined && description !== null && typeof description !== "string") {
+      return NextResponse.json({ success: false, error: "Description must be text" }, { status: 400 });
+    }
+    if (image !== undefined && image !== null && typeof image !== "string") {
+      return NextResponse.json({ success: false, error: "Image URL must be text" }, { status: 400 });
     }
 
     // Verify category exists
@@ -116,7 +120,7 @@ export async function POST(request: NextRequest) {
         name: name.trim(),
         description: description ? description.trim() : null,
         price: roundMoney(numericPrice),
-        image: image ? image.trim() : null,
+        image: typeof image === "string" && image.trim() ? image.trim() : null,
         available: available !== undefined ? Boolean(available) : true,
         categoryId,
       },

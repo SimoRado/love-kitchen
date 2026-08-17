@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Clock, Phone, MapPin, Heart } from "lucide-react";
+import { Clock, Phone, MapPin } from "lucide-react";
 import { RestaurantSettings } from "@/lib/types";
 import { RESTAURANT_ADDRESS, getRestaurantMapsUrl } from "@/lib/constants";
 

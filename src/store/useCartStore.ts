@@ -15,6 +15,7 @@ interface CartState {
   items: CartItem[];
   orderType: OrderType;
   customerInfo: CustomerInfo;
+  hasHydrated: boolean;
   
   // Actions
   addItem: (
@@ -32,6 +33,7 @@ interface CartState {
   setOrderType: (orderType: OrderType) => void;
   setCustomerInfo: (info: Partial<CustomerInfo>) => void;
   clearCart: () => void;
+  setHasHydrated: (value: boolean) => void;
   reconcileWithLatestProducts: (latestProducts: Product[]) => {
     priceChanged: boolean;
     unavailableItems: string[];
@@ -77,6 +79,8 @@ export const useCartStore = create<CartState>()(
         allergies: "",
         notes: "",
       },
+      hasHydrated: false,
+      setHasHydrated: (value) => set({ hasHydrated: value }),
 
       addItem: (product: Product, quantity = 1, selectedModifiers = []) => {
         if (!product.available) return;
@@ -217,7 +221,7 @@ export const useCartStore = create<CartState>()(
         const unavailableItems: string[] = [];
 
         const updatedItems = currentItems
-          .map((item) => {
+          .map<CartItem | null>((item) => {
             const dbProduct = productMap.get(item.product.id);
             if (!dbProduct) return null; // Removed from menu
 
@@ -226,13 +230,19 @@ export const useCartStore = create<CartState>()(
             }
 
             // Verify active modifiers
-            const activeOptionsMap = new Map<string, number>();
+            const activeOptionsMap = new Map<string, SelectedModifierOptionSnapshot>();
             if (dbProduct.modifierGroups) {
               for (const g of dbProduct.modifierGroups) {
                 if (g.active) {
                   for (const opt of g.options) {
                     if (opt.active) {
-                      activeOptionsMap.set(opt.id, opt.priceDelta);
+                      activeOptionsMap.set(opt.id, {
+                        groupId: g.id,
+                        groupName: g.name,
+                        optionId: opt.id,
+                        optionName: opt.name,
+                        priceDelta: opt.priceDelta,
+                      });
                     }
                   }
                 }
@@ -241,23 +251,30 @@ export const useCartStore = create<CartState>()(
 
             // Check if any selected modifier was deleted or deactivated
             let hasInvalidModifier = false;
-            let refreshedModifiers = item.selectedModifiers || [];
-            let modifierDeltaSum = 0;
+            const refreshedModifiers = (item.selectedModifiers || []).map((selection) => {
+              const latest = activeOptionsMap.get(selection.optionId);
+              if (!latest) {
+                hasInvalidModifier = true;
+                unavailableItems.push(`${dbProduct.name} (${selection.optionName})`);
+                return selection;
+              }
+              if (
+                latest.priceDelta !== selection.priceDelta ||
+                latest.optionName !== selection.optionName ||
+                latest.groupName !== selection.groupName
+              ) {
+                priceChanged = true;
+              }
+              return latest;
+            });
 
-            for (const sel of refreshedModifiers) {
-              if (dbProduct.modifierGroups && dbProduct.modifierGroups.length > 0) {
-                if (!activeOptionsMap.has(sel.optionId)) {
-                  hasInvalidModifier = true;
-                  unavailableItems.push(`${dbProduct.name} (${sel.optionName})`);
-                } else {
-                  const dbDelta = activeOptionsMap.get(sel.optionId) ?? sel.priceDelta;
-                  if (dbDelta !== sel.priceDelta) {
-                    priceChanged = true;
-                  }
-                  modifierDeltaSum += dbDelta;
-                }
-              } else {
-                modifierDeltaSum += sel.priceDelta;
+            for (const group of dbProduct.modifierGroups || []) {
+              if (!group.active) continue;
+              const count = refreshedModifiers.filter((selection) => selection.groupId === group.id).length;
+              const minimum = group.required ? Math.max(1, group.minSelections || 0) : (group.minSelections || 0);
+              if (count < minimum || count > group.maxSelections) {
+                hasInvalidModifier = true;
+                unavailableItems.push(`${dbProduct.name} (${group.name})`);
               }
             }
 
@@ -273,7 +290,9 @@ export const useCartStore = create<CartState>()(
             return {
               ...item,
               product: dbProduct,
+              selectedModifiers: refreshedModifiers,
               configuredUnitPrice: latestConfiguredPrice,
+              configurationInvalid: hasInvalidModifier,
             };
           })
           .filter((item): item is CartItem => item !== null);
@@ -299,12 +318,20 @@ export const useCartStore = create<CartState>()(
       },
 
       hasUnavailableItems: () => {
-        return get().items.some((item) => !item.product.available);
+        return get().items.some((item) => !item.product.available || item.configurationInvalid);
       },
     }),
     {
       name: "love-kitchen-cart",
       storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        items: state.items,
+        orderType: state.orderType,
+        customerInfo: state.customerInfo,
+      }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
     }
   )
 );

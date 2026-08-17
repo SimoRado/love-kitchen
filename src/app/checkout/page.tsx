@@ -17,7 +17,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { useCartStore } from "@/store/useCartStore";
-import { RestaurantSettings, Product, OrderType } from "@/lib/types";
+import { RestaurantSettings } from "@/lib/types";
 import { checkRestaurantOpen, RestaurantOpenStatus } from "@/lib/openingHoursHelper";
 import { formatCurrency } from "@/lib/formatters";
 import { calculateOrderTotals } from "@/lib/money";
@@ -34,10 +34,10 @@ export default function CheckoutPage() {
     clearCart,
     reconcileWithLatestProducts,
     hasUnavailableItems,
+    hasHydrated,
   } = useCartStore();
 
   const [settings, setSettings] = useState<RestaurantSettings | null>(null);
-  const [isLoadingSettings, setIsLoadingSettings] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -48,10 +48,29 @@ export default function CheckoutPage() {
   const [allergies, setAllergies] = useState(customerInfo.allergies || "");
   const [notes, setNotes] = useState(customerInfo.notes || "");
   const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
+  const submissionLock = React.useRef(false);
+  const idempotencyKey = React.useRef<string | null>(null);
+
+  /* eslint-disable react-hooks/set-state-in-effect -- synchronize form defaults after persisted cart hydration */
+  useEffect(() => {
+    if (!hasHydrated) return;
+    setName(customerInfo.customerName || "");
+    setPhone(customerInfo.customerPhone || "");
+    setAddress(customerInfo.customerAddress || "");
+    setAllergies(customerInfo.allergies || "");
+    setNotes(customerInfo.notes || "");
+  }, [
+    hasHydrated,
+    customerInfo.customerName,
+    customerInfo.customerPhone,
+    customerInfo.customerAddress,
+    customerInfo.allergies,
+    customerInfo.notes,
+  ]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const loadData = useCallback(async () => {
     try {
-      setIsLoadingSettings(true);
       const [setRes, prodRes] = await Promise.all([
         fetch("/api/settings"),
         fetch("/api/products"),
@@ -69,12 +88,11 @@ export default function CheckoutPage() {
       }
     } catch (err) {
       console.error("Error loading checkout data:", err);
-    } finally {
-      setIsLoadingSettings(false);
     }
   }, [reconcileWithLatestProducts]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load authoritative checkout data after mount
     loadData();
   }, [loadData]);
 
@@ -113,7 +131,7 @@ export default function CheckoutPage() {
     e.preventDefault();
     setErrorMessage("");
 
-    if (!validateForm() || isSubmitting) return;
+    if (!validateForm() || isSubmitting || submissionLock.current) return;
 
     if (!openStatus.isOpen) {
       setErrorMessage(
@@ -136,6 +154,8 @@ export default function CheckoutPage() {
 
     try {
       setIsSubmitting(true);
+      submissionLock.current = true;
+      idempotencyKey.current ??= crypto.randomUUID();
 
       // Save customer info to cart store
       setCustomerInfo({
@@ -153,6 +173,7 @@ export default function CheckoutPage() {
         orderType,
         allergies: allergies.trim() || null,
         notes: notes.trim() || null,
+        idempotencyKey: idempotencyKey.current,
         items: items.map((it) => ({
           productId: it.product.id,
           quantity: it.quantity,
@@ -171,6 +192,7 @@ export default function CheckoutPage() {
       if (data.success && data.data) {
         // Clear cart upon successful order creation
         clearCart();
+        idempotencyKey.current = null;
 
         // Route to order confirmation success screen
         router.push(
@@ -193,9 +215,18 @@ export default function CheckoutPage() {
         "Network error connecting to restaurant. Please check your connection and try again."
       );
     } finally {
+      submissionLock.current = false;
       setIsSubmitting(false);
     }
   };
+
+  if (!hasHydrated) {
+    return (
+      <div className="min-h-screen bg-[#FFFDF9] flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" aria-label="Loading cart" />
+      </div>
+    );
+  }
 
   if (items.length === 0 && !isSubmitting) {
     return (

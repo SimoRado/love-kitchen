@@ -51,6 +51,7 @@ export default function DashboardPage() {
   }, [showToast]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load remote admin data after mount
     fetchStats();
   }, [fetchStats]);
 

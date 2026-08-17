@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { getWhatsAppUrl } from "@/lib/constants";
 import { useCartStore } from "@/store/useCartStore";
 
@@ -13,18 +13,13 @@ export default function WhatsAppFloatingButton({
   whatsappNumber,
   message,
 }: WhatsAppFloatingButtonProps) {
-  const [mounted, setMounted] = useState(false);
   const itemCount = useCartStore((state) => state.getItemCount());
   const hasCartItems = itemCount > 0;
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
   const url = getWhatsAppUrl(whatsappNumber, message);
 
-  // If no valid number is configured or not yet mounted, do NOT render the button
-  if (!url || !mounted) {
+  // If no valid number is configured, do not render the button.
+  if (!url) {
     return null;
   }
 

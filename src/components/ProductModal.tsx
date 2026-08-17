@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { X, Upload, Loader2, Image as ImageIcon, Check } from "lucide-react";
+import { X, Upload, Loader2, Check } from "lucide-react";
 import { Product, Category } from "@/lib/types";
 import { useToast } from "./ToastContext";
 
@@ -36,6 +36,7 @@ export default function ProductModal({
 
   const isEdit = Boolean(product);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- reset the controlled form when its target changes */
   useEffect(() => {
     if (isOpen) {
       if (product) {
@@ -56,6 +57,7 @@ export default function ProductModal({
       setErrors({});
     }
   }, [isOpen, product, categories]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   if (!isOpen) return null;
 

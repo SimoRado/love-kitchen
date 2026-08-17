@@ -24,13 +24,17 @@ export default function CartDrawer({
   isRestaurantOpen,
   onClose,
 }: CartDrawerProps) {
-  const [mounted, setMounted] = useState(false);
   const [isRendered, setIsRendered] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
 
   const isClosingRef = useRef(false);
   const fallbackTimerRef = useRef<NodeJS.Timeout | null>(null);
   const rafRef = useRef<number | null>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   const {
     items,
@@ -49,7 +53,6 @@ export default function CartDrawer({
   useBodyScrollLock(isRendered);
 
   useEffect(() => {
-    setMounted(true);
     return () => {
       if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -72,9 +75,9 @@ export default function CartDrawer({
     fallbackTimerRef.current = setTimeout(() => {
       setIsRendered(false);
       isClosingRef.current = false;
-      onClose();
+      onCloseRef.current();
     }, 400);
-  }, [onClose]);
+  }, []);
 
   // Deterministic mount -> paint closed state -> animate open on next frame
   useEffect(() => {
@@ -85,6 +88,7 @@ export default function CartDrawer({
         fallbackTimerRef.current = null;
       }
       // 1. Mount in offscreen closed state
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- prop-driven mount starts the preserved entrance animation
       setIsRendered(true);
       setIsVisible(false);
 
@@ -102,7 +106,7 @@ export default function CartDrawer({
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [isOpen]); // Stable dependency
+  }, [isOpen, isRendered, handleDismiss]);
 
   const handlePanelTransitionEnd = (e: React.TransitionEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return;
@@ -115,7 +119,7 @@ export default function CartDrawer({
       }
       setIsRendered(false);
       isClosingRef.current = false;
-      onClose();
+      onCloseRef.current();
     }
   };
 
@@ -148,7 +152,7 @@ export default function CartDrawer({
     setEditingCartItem(null);
   };
 
-  if (!isRendered || !mounted) return null;
+  if (!isRendered) return null;
 
   const drawerContent = (
     <>
@@ -173,6 +177,9 @@ export default function CartDrawer({
         {/* Slide-out Panel Container */}
         <div className="fixed inset-y-0 right-0 max-w-full flex pl-6 sm:pl-10 h-full max-h-[100dvh] h-[100dvh] pointer-events-none">
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cart-drawer-title"
             onTransitionEnd={handlePanelTransitionEnd}
             style={{
               overscrollBehavior: "contain",
@@ -188,7 +195,7 @@ export default function CartDrawer({
             <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-orange-50/30 shrink-0">
               <div className="flex items-center gap-2">
                 <ShoppingBag className="w-5 h-5 text-primary" />
-                <h3 className="font-semibold text-base text-slate-900">Your Order</h3>
+                <h3 id="cart-drawer-title" className="font-semibold text-base text-slate-900">Your Order</h3>
                 <span className="bg-orange-100 text-primary text-xs font-semibold px-2 py-0.5 rounded-full">
                   {itemCount}
                 </span>

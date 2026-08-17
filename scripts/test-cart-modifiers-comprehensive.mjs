@@ -130,6 +130,7 @@ async function runTests() {
   console.log("\n--- Testing Verification Prompt Sections 26-29 ---");
 
   const orderPayload = {
+    idempotencyKey: crypto.randomUUID(),
     customerName: "Yassine Mansouri",
     customerPhone: "+212 611 223344",
     customerAddress: "Boulevard Massira Khadra, Casablanca",

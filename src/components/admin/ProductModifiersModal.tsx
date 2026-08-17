@@ -13,8 +13,6 @@ import {
   ToggleLeft,
   ToggleRight,
   Layers,
-  ChevronDown,
-  ChevronUp,
 } from "lucide-react";
 import { Product, ProductModifierGroup, ProductModifierOption } from "@/lib/types";
 import { formatCurrency } from "@/lib/formatters";
@@ -88,6 +86,7 @@ export default function ProductModifiersModal({
     }
   }, [product, showToast]);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- load modifiers and reset transient editor state on open */
   useEffect(() => {
     if (isOpen && product) {
       fetchModifiers();
@@ -97,6 +96,7 @@ export default function ProductModifiersModal({
       setEditingOption(null);
     }
   }, [isOpen, product, fetchModifiers]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   if (!isOpen || !product) return null;
 

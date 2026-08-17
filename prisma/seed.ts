@@ -17,7 +17,7 @@ async function main() {
   await prisma.restaurantSettings.deleteMany();
 
   // 1. Restaurant Settings
-  const settings = await prisma.restaurantSettings.create({
+  await prisma.restaurantSettings.create({
     data: {
       id: "default",
       name: "Love Kitchen",
@@ -62,7 +62,7 @@ async function main() {
   console.log("✅ Categories created.");
 
   // 3. Products
-  const tacos = await prisma.product.create({
+  await prisma.product.create({
     data: {
       name: "French Tacos (Artisanal)",
       description: "Signature French tacos with golden french fries and creamy house Gruyère cheese sauce wrapped in a toasted tortilla.",
@@ -127,7 +127,7 @@ async function main() {
     },
   });
 
-  const p1 = await prisma.product.create({
+  await prisma.product.create({
     data: {
       name: "Classic Cheeseburger",
       description: "Juicy prime beef patty with aged cheddar, crisp lettuce, fresh tomato, pickles, and our signature burger sauce on a toasted brioche bun.",
@@ -138,7 +138,7 @@ async function main() {
     },
   });
 
-  const p2 = await prisma.product.create({
+  await prisma.product.create({
     data: {
       name: "Double Bacon Smash Burger",
       description: "Two crispy smashed beef patties, smoky beef bacon strips, caramelized onions, double cheddar, and BBQ aioli.",
@@ -149,7 +149,7 @@ async function main() {
     },
   });
 
-  const p3 = await prisma.product.create({
+  await prisma.product.create({
     data: {
       name: "Crispy Truffle Chicken Burger",
       description: "Crispy buttermilk fried chicken breast, truffle mayonnaise, melted provolone cheese, and fresh baby arugula.",
@@ -160,7 +160,7 @@ async function main() {
     },
   });
 
-  const p4 = await prisma.product.create({
+  await prisma.product.create({
     data: {
       name: "Pizza Margherita D.O.P.",
       description: "San Marzano tomato sauce, fresh mozzarella di bufala, basil leaves, and a drizzle of cold-pressed extra virgin olive oil.",
@@ -171,7 +171,7 @@ async function main() {
     },
   });
 
-  const p5 = await prisma.product.create({
+  await prisma.product.create({
     data: {
       name: "Pizza Diavola Piccante",
       description: "Fiery tomato sauce base, fior di latte mozzarella, artisanal spicy beef salami, and Calabrian chili oil.",
@@ -182,7 +182,7 @@ async function main() {
     },
   });
 
-  const p6 = await prisma.product.create({
+  await prisma.product.create({
     data: {
       name: "Loaded Truffle Parmesan Fries",
       description: "Hand-cut golden french fries tossed with aromatic white truffle oil, freshly grated 24-month Parmigiano-Reggiano, and parsley.",
@@ -193,7 +193,7 @@ async function main() {
     },
   });
 
-  const p7 = await prisma.product.create({
+  await prisma.product.create({
     data: {
       name: "Crispy Mozzarella Sticks",
       description: "6 crispy golden breaded mozzarella sticks served with house warm basil marinara dip.",
@@ -204,7 +204,7 @@ async function main() {
     },
   });
 
-  const p8 = await prisma.product.create({
+  await prisma.product.create({
     data: {
       name: "Warm Molten Chocolate Lava Cake",
       description: "Rich Belgian dark chocolate cake with a warm flowing center, served with artisanal Madagascar vanilla ice cream.",
@@ -215,7 +215,7 @@ async function main() {
     },
   });
 
-  const p9 = await prisma.product.create({
+  await prisma.product.create({
     data: {
       name: "Homemade Italian Tiramisu",
       description: "Layers of espresso-infused savoiardi biscuits and velvety mascarpone cream, finished with Valrhona cocoa powder.",
@@ -226,7 +226,7 @@ async function main() {
     },
   });
 
-  const p10 = await prisma.product.create({
+  await prisma.product.create({
     data: {
       name: "Fresh Pressed Lemonade & Mint",
       description: "Freshly squeezed citrus lemonade infused with organic garden mint and light cane sugar syrup.",
@@ -237,7 +237,7 @@ async function main() {
     },
   });
 
-  const p11 = await prisma.product.create({
+  await prisma.product.create({
     data: {
       name: "Coca-Cola Zero (33cl)",
       description: "Ice cold can of Coca-Cola Zero Sugar.",

@@ -9,10 +9,8 @@ import {
   FileText,
   Clock,
   CheckCircle2,
-  AlertCircle,
   AlertTriangle,
   Loader2,
-  ChevronRight,
   Truck,
   ShoppingBag,
 } from "lucide-react";
@@ -24,6 +22,7 @@ import {
 } from "@/lib/formatters";
 import OrderStatusBadge from "./OrderStatusBadge";
 import { useToast } from "./ToastContext";
+import { useBodyScrollLock } from "@/lib/useBodyScrollLock";
 
 interface OrderDetailsModalProps {
   isOpen: boolean;
@@ -51,18 +50,11 @@ export default function OrderDetailsModal({
   const { showToast } = useToast();
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
-  // Lock body scroll while modal is open
+  useBodyScrollLock(isOpen);
+
+  // Close on Escape while modal is open.
   useEffect(() => {
     if (!isOpen) return;
-
-    const prevOverflow = document.body.style.overflow;
-    const prevPaddingRight = document.body.style.paddingRight;
-
-    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
-    if (scrollbarWidth > 0) {
-      document.body.style.paddingRight = `${scrollbarWidth}px`;
-    }
-    document.body.style.overflow = "hidden";
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -80,8 +72,6 @@ export default function OrderDetailsModal({
     window.addEventListener("keydown", handleKeyDown);
 
     return () => {
-      document.body.style.overflow = prevOverflow;
-      document.body.style.paddingRight = prevPaddingRight;
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [isOpen, onClose]);
@@ -129,6 +119,9 @@ export default function OrderDetailsModal({
     >
       {/* Backdrop */}
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="order-details-title"
         className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity"
         onClick={onClose}
         onTouchMove={(e) => e.preventDefault()}
@@ -145,7 +138,7 @@ export default function OrderDetailsModal({
           <div className="flex items-center gap-3">
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-text-main">
+                <h2 id="order-details-title" className="text-lg font-bold text-text-main">
                   {order.orderNumber}
                 </h2>
                 <OrderStatusBadge status={order.status} size="sm" />
@@ -171,7 +164,7 @@ export default function OrderDetailsModal({
         </div>
 
         {/* Content Body */}
-        <div className="p-6 overflow-y-auto space-y-6 flex-1">
+        <div className="p-6 overflow-y-auto overscroll-contain space-y-6 flex-1">
           {/* Status Progression Bar */}
           <div className="bg-surface-subtle border border-border rounded-xl p-4">
             <div className="flex items-center justify-between mb-3">

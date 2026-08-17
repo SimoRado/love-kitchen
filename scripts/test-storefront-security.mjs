@@ -86,6 +86,7 @@ async function runSuite() {
   const testProduct2 = simpleProducts[1] || freshProdData.data[1];
 
   const orderPayload = {
+    idempotencyKey: crypto.randomUUID(),
     customerName: "Kenza Tazi",
     customerPhone: "+212 660 001122",
     customerAddress: "55 Boulevard d'Anfa, 3rd Floor, Casablanca",
@@ -112,6 +113,7 @@ async function runSuite() {
   // 6. Test Pickup Order (Delivery fee must be 0)
   console.log("\n--- 6. Testing Pickup Order (0 MAD Delivery Fee) ---");
   const pickupOrderPayload = {
+    idempotencyKey: crypto.randomUUID(),
     customerName: "Omar Bennani",
     customerPhone: "+212 661 334455",
     orderType: "PICKUP",
@@ -137,12 +139,11 @@ async function runSuite() {
   });
   const patchText = await patchRes.text();
   console.log(`PATCH status: ${patchRes.status}`, patchText);
-  const patchData = JSON.parse(patchText);
-
   const tryUnavailableOrder = await fetch(`${baseUrl}/api/orders`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      idempotencyKey: crypto.randomUUID(),
       customerName: "Test User",
       customerPhone: "+212 600 000000",
       orderType: "PICKUP",
@@ -151,7 +152,7 @@ async function runSuite() {
   });
   const tryUnavailableData = await tryUnavailableOrder.json();
   console.log(`🔒 Order with unavailable item rejected: status ${tryUnavailableOrder.status}, Message: "${tryUnavailableData.error}"`);
-  if (tryUnavailableOrder.status !== 400) throw new Error("Expected order with unavailable product to be rejected!");
+  if (tryUnavailableOrder.status !== 409) throw new Error("Expected order with unavailable product to be rejected!");
 
   // Restore availability
   await fetch(`${baseUrl}/api/products/${testProduct1.id}/availability`, {
@@ -176,6 +177,7 @@ async function runSuite() {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      idempotencyKey: crypto.randomUUID(),
       customerName: "Test User",
       customerPhone: "+212 600 000000",
       orderType: "PICKUP",
@@ -184,7 +186,7 @@ async function runSuite() {
   });
   const tryClosedData = await tryClosedOrder.json();
   console.log(`🔒 Order while restaurant closed rejected: status ${tryClosedOrder.status}, Message: "${tryClosedData.error}"`);
-  if (tryClosedOrder.status !== 400) throw new Error("Expected order on closed restaurant to be rejected!");
+  if (tryClosedOrder.status !== 409) throw new Error("Expected order on closed restaurant to be rejected!");
 
   // Restore restaurant back to normal schedule (isOpenOverride: null)
   await fetch(`${baseUrl}/api/settings`, {

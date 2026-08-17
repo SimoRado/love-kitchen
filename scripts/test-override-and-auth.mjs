@@ -66,6 +66,7 @@ async function main() {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      idempotencyKey: crypto.randomUUID(),
       customerName: "Test Buyer",
       customerPhone: "+212 600 112233",
       orderType: "PICKUP",
@@ -74,7 +75,7 @@ async function main() {
   });
   const orderAttemptClosedData = await orderAttemptClosed.json();
   console.log(`🔒 Order placement while Force Closed: ${orderAttemptClosed.status}, Error: "${orderAttemptClosedData.error}"`);
-  assert.strictEqual(orderAttemptClosed.status, 400, "Expected order to be rejected when Force Closed");
+  assert.strictEqual(orderAttemptClosed.status, 409, "Expected order to be rejected when Force Closed");
 
   // ==========================================
   // 4. TEST FORCE OPEN (isOpenOverride: true)
@@ -102,6 +103,7 @@ async function main() {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      idempotencyKey: crypto.randomUUID(),
       customerName: "Test Buyer",
       customerPhone: "+212 600 112233",
       orderType: "PICKUP",

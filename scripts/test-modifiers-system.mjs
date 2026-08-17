@@ -183,6 +183,7 @@ async function main() {
   const expectedUnitPrice = tacosProduct.price + 18;
 
   const validOrderPayload = {
+    idempotencyKey: crypto.randomUUID(),
     customerName: "Amine Alami",
     customerPhone: "+212 600 112233",
     customerAddress: "45 Rue Ibn Batouta, Casablanca",
@@ -225,6 +226,7 @@ async function main() {
 
   // A. Exceeding maxSelections (3 sauces when max is 2)
   const tooManySaucesPayload = {
+    idempotencyKey: crypto.randomUUID(),
     customerName: "Hacker User",
     customerPhone: "+212 600 000000",
     customerAddress: "Test Street",
@@ -247,6 +249,7 @@ async function main() {
 
   // B. Failing required group (0 sauces when required = true)
   const noSaucesPayload = {
+    idempotencyKey: crypto.randomUUID(),
     customerName: "Incomplete User",
     customerPhone: "+212 600 000000",
     customerAddress: "Test Street",
@@ -283,6 +286,7 @@ async function main() {
     const foreignOptionId = foreignData.data.options[0].id;
 
     const crossProductPayload = {
+      idempotencyKey: crypto.randomUUID(),
       customerName: "Cross Product Attacker",
       customerPhone: "+212 600 000000",
       customerAddress: "Test Street",
@@ -300,8 +304,8 @@ async function main() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(crossProductPayload),
     });
-    assert.strictEqual(crossRes.status, 400, "Cross-product modifier injection must be rejected (400)");
-    console.log("🔒 Cross-product modifier injection rejected with 400.");
+    assert.strictEqual(crossRes.status, 409, "Cross-product modifier injection must be rejected (409)");
+    console.log("🔒 Cross-product modifier injection rejected with 409.");
   }
 
   // 9. Test Historical Snapshot Immutability
@@ -335,6 +339,7 @@ async function main() {
 
   // Create a NEW order with Chicken
   const newOrderPayload = {
+    idempotencyKey: crypto.randomUUID(),
     customerName: "Youssef Bennani",
     customerPhone: "+212 611 998877",
     customerAddress: "12 Bd Zerktouni, Casablanca",

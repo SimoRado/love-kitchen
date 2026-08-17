@@ -6,6 +6,13 @@ export async function POST(request: NextRequest) {
   const authError = await requireAdminAuth(request);
   if (authError) return authError;
 
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json(
+      { success: false, error: "Database seeding is disabled in production." },
+      { status: 403 }
+    );
+  }
+
   try {
     // Clean up existing data
     await prisma.orderItem.deleteMany();
@@ -126,7 +133,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const p2 = await prisma.product.create({
+    await prisma.product.create({
       data: {
         name: "Double Bacon Smash Burger",
         description: "Two crispy smashed beef patties, smoky beef bacon strips, caramelized onions, double cheddar, and BBQ aioli.",
@@ -171,7 +178,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const p3 = await prisma.product.create({
+    await prisma.product.create({
       data: {
         name: "Crispy Truffle Chicken Burger",
         description: "Crispy buttermilk fried chicken breast, truffle mayonnaise, melted provolone cheese, and fresh baby arugula.",
@@ -182,7 +189,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const p4 = await prisma.product.create({
+    await prisma.product.create({
       data: {
         name: "Pizza Margherita D.O.P.",
         description: "San Marzano tomato sauce, fresh mozzarella di bufala, basil leaves, and a drizzle of cold-pressed extra virgin olive oil.",
@@ -193,7 +200,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const p5 = await prisma.product.create({
+    await prisma.product.create({
       data: {
         name: "Pizza Diavola Piccante",
         description: "Fiery tomato sauce base, fior di latte mozzarella, artisanal spicy beef salami, and Calabrian chili oil.",
@@ -215,7 +222,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const p7 = await prisma.product.create({
+    await prisma.product.create({
       data: {
         name: "Crispy Mozzarella Sticks",
         description: "6 crispy golden breaded mozzarella sticks served with house warm basil marinara dip.",
@@ -226,7 +233,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const p8 = await prisma.product.create({
+    await prisma.product.create({
       data: {
         name: "Warm Molten Chocolate Lava Cake",
         description: "Rich Belgian dark chocolate cake with a warm flowing center, served with artisanal Madagascar vanilla ice cream.",
@@ -237,7 +244,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const p9 = await prisma.product.create({
+    await prisma.product.create({
       data: {
         name: "Homemade Italian Tiramisu",
         description: "Layers of espresso-infused savoiardi biscuits and velvety mascarpone cream, finished with Valrhona cocoa powder.",
@@ -248,7 +255,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const p10 = await prisma.product.create({
+    await prisma.product.create({
       data: {
         name: "Fresh Pressed Lemonade & Mint",
         description: "Freshly squeezed citrus lemonade infused with organic garden mint and light cane sugar syrup.",

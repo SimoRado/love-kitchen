@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdminAuth } from "@/lib/auth";
 import { roundMoney } from "@/lib/money";
+import { deleteUnusedProductBlob } from "@/lib/blob";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -68,7 +69,7 @@ export async function PUT(
     }
 
     const numericPrice = typeof price === "number" ? price : parseFloat(price);
-    if (isNaN(numericPrice) || numericPrice < 0) {
+    if (!Number.isFinite(numericPrice) || numericPrice < 0) {
       return NextResponse.json(
         { success: false, error: "Price must be a valid number greater than or equal to 0" },
         { status: 400 }
@@ -80,6 +81,13 @@ export async function PUT(
         { success: false, error: "Category is required" },
         { status: 400 }
       );
+    }
+
+    if (description !== undefined && description !== null && typeof description !== "string") {
+      return NextResponse.json({ success: false, error: "Description must be text" }, { status: 400 });
+    }
+    if (image !== undefined && image !== null && typeof image !== "string") {
+      return NextResponse.json({ success: false, error: "Image URL must be text" }, { status: 400 });
     }
 
     const categoryExists = await prisma.category.findUnique({
@@ -107,6 +115,10 @@ export async function PUT(
         category: true,
       },
     });
+
+    if (existingProduct.image && existingProduct.image !== updatedProduct.image) {
+      await deleteUnusedProductBlob(existingProduct.image);
+    }
 
     return NextResponse.json({
       success: true,
@@ -145,6 +157,8 @@ export async function DELETE(
     await prisma.product.delete({
       where: { id },
     });
+
+    await deleteUnusedProductBlob(existingProduct.image);
 
     return NextResponse.json({
       success: true,

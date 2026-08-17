@@ -39,7 +39,6 @@ export default function ProductConfigModal({
   onClose,
   onConfirm,
 }: ProductConfigModalProps) {
-  const [mounted, setMounted] = useState(false);
   const [isRendered, setIsRendered] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [selectedMap, setSelectedMap] = useState<Map<string, SelectedModifierOptionSnapshot>>(new Map());
@@ -49,12 +48,16 @@ export default function ProductConfigModal({
   const isClosingRef = useRef(false);
   const fallbackTimerRef = useRef<NodeJS.Timeout | null>(null);
   const rafRef = useRef<number | null>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   // Lock background body scroll while modal is rendered (open or animating out)
   useBodyScrollLock(isRendered && Boolean(product));
 
   useEffect(() => {
-    setMounted(true);
     return () => {
       if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -113,9 +116,9 @@ export default function ProductConfigModal({
     fallbackTimerRef.current = setTimeout(() => {
       setIsRendered(false);
       isClosingRef.current = false;
-      onClose();
+      onCloseRef.current();
     }, 380);
-  }, [onClose]);
+  }, []);
 
   // Deterministic mount -> paint closed state -> animate open on next frame
   const productId = product?.id;
@@ -127,6 +130,7 @@ export default function ProductConfigModal({
         fallbackTimerRef.current = null;
       }
       // 1. Mount in closed initial state
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- prop-driven mount starts the preserved entrance animation
       setIsRendered(true);
       setIsVisible(false);
 
@@ -144,7 +148,7 @@ export default function ProductConfigModal({
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [isOpen, productId]); // Stable dependencies
+  }, [isOpen, productId, isRendered, handleDismiss]);
 
   const handlePanelTransitionEnd = (e: React.TransitionEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return;
@@ -157,7 +161,7 @@ export default function ProductConfigModal({
       }
       setIsRendered(false);
       isClosingRef.current = false;
-      onClose();
+      onCloseRef.current();
     }
   };
 
@@ -203,7 +207,7 @@ export default function ProductConfigModal({
     return roundMoney(calculatedUnitPrice * safeQuantity);
   }, [calculatedUnitPrice, safeQuantity]);
 
-  if (!isRendered || !product || !mounted) return null;
+  if (!isRendered || !product) return null;
 
   const handleToggleOption = (
     group: { id: string; name: string; maxSelections: number; required?: boolean },
@@ -317,6 +321,9 @@ export default function ProductConfigModal({
       <div className="fixed inset-0 flex items-end sm:items-center justify-center p-0 sm:p-4 pointer-events-none">
         {/* 3. Animated Inner Modal Panel */}
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="product-config-title"
           onTransitionEnd={handlePanelTransitionEnd}
           style={{
             overscrollBehavior: "contain",
@@ -349,7 +356,7 @@ export default function ProductConfigModal({
               )}
 
               <div className="min-w-0">
-                <h3 className="font-semibold text-base sm:text-lg text-slate-900 leading-snug truncate">
+                <h3 id="product-config-title" className="font-semibold text-base sm:text-lg text-slate-900 leading-snug truncate">
                   {product.name}
                 </h3>
                 <p className="text-xs font-semibold text-primary mt-0.5">

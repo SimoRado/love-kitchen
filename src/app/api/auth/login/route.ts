@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const isValid = validateAdminPassword(password);
+    const isValid = await validateAdminPassword(password);
     if (!isValid) {
       return NextResponse.json(
         { success: false, error: "Invalid admin password" },

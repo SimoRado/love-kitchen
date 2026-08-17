@@ -41,7 +41,7 @@ function runUnitTests() {
 
   // 2. Force Closed with numeric 0 from SQLite
   const forceClosedNumeric = checkRestaurantOpen(
-    { ...mockSettings, isOpenOverride: 0 as any },
+    { ...mockSettings, isOpenOverride: 0 as unknown as boolean },
     wednesday1400
   );
   assert.strictEqual(forceClosedNumeric.isOpen, false);
@@ -60,7 +60,7 @@ function runUnitTests() {
 
   // 4. Force Open with numeric 1 from SQLite
   const forceOpenNumeric = checkRestaurantOpen(
-    { ...mockSettings, isOpenOverride: 1 as any },
+    { ...mockSettings, isOpenOverride: 1 as unknown as boolean },
     wednesday0400
   );
   assert.strictEqual(forceOpenNumeric.isOpen, true);
@@ -85,6 +85,17 @@ function runUnitTests() {
   assert.strictEqual(autoClosedEarly.isOpen, false);
   assert.strictEqual(autoClosedEarly.statusText, "CURRENTLY CLOSED");
   assert.strictEqual(autoClosedEarly.statusDetail, "Opens today at 11:30");
+
+  const overnightSettings = {
+    ...mockSettings,
+    openingHours: mockSettings.openingHours.map((entry) =>
+      entry.dayOfWeek === 5 ? { ...entry, closeTime: "00:30" } : entry
+    ),
+  };
+  const saturdayAfterMidnight = new Date("2026-08-21T23:15:00.000Z");
+  const overnightStatus = checkRestaurantOpen(overnightSettings, saturdayAfterMidnight);
+  assert.strictEqual(overnightStatus.isOpen, true);
+  assert.strictEqual(overnightStatus.statusDetail, "Open until 00:30");
 
   console.log("\n🎉 ALL UNIT TESTS PASSED FOR checkRestaurantOpen!");
 }

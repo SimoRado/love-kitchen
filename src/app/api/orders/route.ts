@@ -1,368 +1,290 @@
+import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAdminAuth } from "@/lib/auth";
 import { checkRestaurantOpen } from "@/lib/openingHoursHelper";
 import { calculateOrderTotals, roundMoney } from "@/lib/money";
 
+const VALID_STATUSES = new Set([
+  "PENDING",
+  "CONFIRMED",
+  "PREPARING",
+  "READY",
+  "COMPLETED",
+  "CANCELLED",
+]);
+const MAX_ITEMS = 50;
+const MAX_QUANTITY = 99;
+
+const orderInclude = {
+  items: { include: { modifiers: true } },
+} satisfies Prisma.OrderInclude;
+
+class OrderRequestError extends Error {
+  constructor(message: string, readonly statusCode = 400) {
+    super(message);
+  }
+}
+
+function requiredText(value: unknown, label: string, maxLength: number): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new OrderRequestError(`${label} is required.`);
+  }
+  const result = value.trim();
+  if (result.length > maxLength) {
+    throw new OrderRequestError(`${label} is too long.`);
+  }
+  return result;
+}
+
+function optionalText(value: unknown, label: string, maxLength: number): string | null {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string") throw new OrderRequestError(`${label} must be text.`);
+  const result = value.trim();
+  if (!result) return null;
+  if (result.length > maxLength) throw new OrderRequestError(`${label} is too long.`);
+  return result;
+}
+
+function generateOrderNumber(): string {
+  const time = Date.now().toString(36).toUpperCase();
+  const random = crypto.randomUUID().slice(0, 4).toUpperCase();
+  return `ORD-${time}-${random}`;
+}
+
+function withoutIdempotencyKey<T extends { idempotencyKey?: string | null }>(order: T) {
+  const copy = { ...order };
+  delete copy.idempotencyKey;
+  return copy;
+}
+
 export async function GET(request: NextRequest) {
+  const authError = await requireAdminAuth(request);
+  if (authError) return authError;
+
   try {
     const { searchParams } = new URL(request.url);
-    const status = searchParams.get("status");
-    const search = searchParams.get("search")?.trim();
-
-    const whereClause: {
-      status?: string;
-      OR?: Array<{
-        orderNumber?: { contains: string };
-        customerName?: { contains: string };
-        customerPhone?: { contains: string };
-      }>;
-    } = {};
+    const status = searchParams.get("status")?.toUpperCase();
+    const search = searchParams.get("search")?.trim().slice(0, 100);
+    const where: Prisma.OrderWhereInput = {};
 
     if (status && status !== "ALL") {
-      whereClause.status = status;
+      if (!VALID_STATUSES.has(status)) {
+        return NextResponse.json({ success: false, error: "Invalid order status." }, { status: 400 });
+      }
+      where.status = status;
     }
-
     if (search) {
-      whereClause.OR = [
-        { orderNumber: { contains: search } },
-        { customerName: { contains: search } },
+      where.OR = [
+        { orderNumber: { contains: search, mode: "insensitive" } },
+        { customerName: { contains: search, mode: "insensitive" } },
         { customerPhone: { contains: search } },
       ];
     }
 
     const orders = await prisma.order.findMany({
-      where: whereClause,
-      include: {
-        items: {
-          include: {
-            modifiers: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
+      where,
+      include: orderInclude,
+      orderBy: { createdAt: "desc" },
+      take: 500,
     });
-
-    return NextResponse.json({ success: true, data: orders });
+    return NextResponse.json({ success: true, data: orders.map(withoutIdempotencyKey) });
   } catch (error) {
-    console.error("Error fetching orders:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to fetch orders" },
-      { status: 500 }
-    );
+    console.error("Failed to fetch orders:", error);
+    return NextResponse.json({ success: false, error: "Failed to fetch orders" }, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const {
-      customerName,
-      customerPhone,
-      customerAddress,
-      orderType = "DELIVERY",
-      allergies,
-      notes,
-      items,
-    } = body;
-
-    // 1. Validate Customer Information
-    if (!customerName || typeof customerName !== "string" || !customerName.trim()) {
-      return NextResponse.json(
-        { success: false, error: "Customer full name is required." },
-        { status: 400 }
-      );
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      throw new OrderRequestError("Request body must be valid JSON.");
+    }
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      throw new OrderRequestError("Invalid order request.");
     }
 
-    if (!customerPhone || typeof customerPhone !== "string" || !customerPhone.trim()) {
-      return NextResponse.json(
-        { success: false, error: "Customer phone number is required." },
-        { status: 400 }
-      );
+    const input = body as Record<string, unknown>;
+    const customerName = requiredText(input.customerName, "Customer full name", 100);
+    const customerPhone = requiredText(input.customerPhone, "Customer phone number", 30);
+    const phoneDigits = customerPhone.replace(/\D/g, "");
+    if (phoneDigits.length < 8 || phoneDigits.length > 15) {
+      throw new OrderRequestError("Please provide a valid phone number.");
     }
 
-    const normalizedOrderType =
-      String(orderType).toUpperCase() === "PICKUP" ? "PICKUP" : "DELIVERY";
-
-    if (
-      normalizedOrderType === "DELIVERY" &&
-      (!customerAddress || typeof customerAddress !== "string" || !customerAddress.trim())
-    ) {
-      return NextResponse.json(
-        { success: false, error: "Delivery address is required for delivery orders." },
-        { status: 400 }
-      );
+    if (input.orderType !== "DELIVERY" && input.orderType !== "PICKUP") {
+      throw new OrderRequestError("Order type must be DELIVERY or PICKUP.");
     }
-
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return NextResponse.json(
-        { success: false, error: "Your order must contain at least one product." },
-        { status: 400 }
-      );
-    }
-
-    // 2. Fetch Restaurant Settings & Verify Restaurant is OPEN
-    const dbSettings = await prisma.restaurantSettings.findUnique({
-      where: { id: "default" },
-      include: {
-        openingHours: {
-          orderBy: { dayOfWeek: "asc" },
-        },
-      },
-    });
-
-    const normalizedSettings = dbSettings
-      ? {
-          ...dbSettings,
-          deliveryFee: Number(dbSettings.deliveryFee ?? 15),
-          isOpenOverride: dbSettings.isOpenOverride,
-          openingHours: dbSettings.openingHours,
-        }
+    const orderType = input.orderType;
+    const customerAddress = orderType === "DELIVERY"
+      ? requiredText(input.customerAddress, "Delivery address", 500)
       : null;
-
-    const openStatus = checkRestaurantOpen(normalizedSettings);
-    if (!openStatus.isOpen) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "The restaurant is currently closed. Orders cannot be placed right now.",
-        },
-        { status: 400 }
-      );
+    const allergies = optionalText(input.allergies, "Allergies", 500);
+    const notes = optionalText(input.notes, "Notes", 1000);
+    const idempotencyKey = requiredText(input.idempotencyKey, "Checkout request ID", 100);
+    if (!/^[A-Za-z0-9_-]{8,100}$/.test(idempotencyKey)) {
+      throw new OrderRequestError("Invalid checkout request ID.");
+    }
+    if (!Array.isArray(input.items) || input.items.length === 0 || input.items.length > MAX_ITEMS) {
+      throw new OrderRequestError(`Your order must contain between 1 and ${MAX_ITEMS} items.`);
     }
 
-    // 3. Load & Verify all Products and their Active Modifier Groups/Options from Database
-    const itemProductIds = items
-      .map((it: { productId?: string }) => it.productId)
-      .filter((id): id is string => Boolean(id));
-
-    if (itemProductIds.length !== items.length) {
-      return NextResponse.json(
-        { success: false, error: "Invalid product information in order items." },
-        { status: 400 }
-      );
-    }
-
-    const dbProducts = await prisma.product.findMany({
-      where: {
-        id: { in: itemProductIds },
-      },
-      include: {
-        modifierGroups: {
-          where: { active: true },
-          include: {
-            options: {
-              where: { active: true },
-            },
-          },
-        },
-      },
+    const existingOrder = await prisma.order.findUnique({
+      where: { idempotencyKey },
+      include: orderInclude,
     });
+    if (existingOrder) {
+      return NextResponse.json({ success: true, data: withoutIdempotencyKey(existingOrder), message: `Order #${existingOrder.orderNumber} already placed.` });
+    }
 
-    const productMap = new Map(dbProducts.map((p) => [p.id, p]));
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        const order = await prisma.$transaction(async (tx) => {
+          const duplicate = await tx.order.findUnique({
+            where: { idempotencyKey },
+            include: orderInclude,
+          });
+          if (duplicate) return duplicate;
 
-    const validatedItemsToCreate: Array<{
-      productId: string;
-      productName: string;
-      price: number;
-      configuredUnitPrice: number;
-      quantity: number;
-      modifiers?: {
-        create: Array<{
-          modifierGroupName: string;
-          modifierOptionName: string;
-          priceDelta: number;
-        }>;
-      };
-    }> = [];
+          const settings = await tx.restaurantSettings.findUnique({
+            where: { id: "default" },
+            include: { openingHours: { orderBy: { dayOfWeek: "asc" } } },
+          });
+          if (!settings || !checkRestaurantOpen(settings).isOpen) {
+            throw new OrderRequestError("The restaurant is currently closed. Orders cannot be placed right now.", 409);
+          }
 
-    for (const item of items) {
-      const dbProduct = productMap.get(item.productId);
-      if (!dbProduct) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "One or more items in your cart no longer exist. Please refresh your cart.",
-          },
-          { status: 400 }
-        );
-      }
-
-      // Check product availability
-      if (!dbProduct.available) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: `"${dbProduct.name}" is currently unavailable or sold out. Please remove it from your cart.`,
-          },
-          { status: 400 }
-        );
-      }
-
-      const qty = Math.max(1, Math.floor(Number(item.quantity)) || 1);
-      const basePrice = roundMoney(dbProduct.price);
-
-      // Selected modifier option IDs sent by client
-      const incomingOptionIds: string[] = Array.isArray(item.selectedModifierOptionIds)
-        ? item.selectedModifierOptionIds.filter((id: unknown): id is string => typeof id === "string" && Boolean(id.trim()))
-        : [];
-
-      // Create lookup of active options for this product
-      const activeOptionsMap = new Map<
-        string,
-        {
-          option: { id: string; name: string; priceDelta: number };
-          group: { id: string; name: string; required: boolean; minSelections: number; maxSelections: number };
-        }
-      >();
-      const groupSelectionsCount = new Map<string, number>();
-
-      for (const group of dbProduct.modifierGroups) {
-        groupSelectionsCount.set(group.id, 0);
-        for (const opt of group.options) {
-          activeOptionsMap.set(opt.id, { option: opt, group });
-        }
-      }
-
-      const snapshotModifiersToCreate: Array<{
-        modifierGroupName: string;
-        modifierOptionName: string;
-        priceDelta: number;
-      }> = [];
-
-      let totalModifierDelta = 0;
-
-      // Verify every submitted option belongs to this product's active groups
-      for (const optId of incomingOptionIds) {
-        const found = activeOptionsMap.get(optId);
-        if (!found) {
-          return NextResponse.json(
-            {
-              success: false,
-              error: `Invalid or unavailable modifier option selected for "${dbProduct.name}". Please reconfigure this item.`,
-            },
-            { status: 400 }
-          );
-        }
-
-        const count = (groupSelectionsCount.get(found.group.id) || 0) + 1;
-        groupSelectionsCount.set(found.group.id, count);
-
-        const delta = roundMoney(found.option.priceDelta);
-        totalModifierDelta = roundMoney(totalModifierDelta + delta);
-
-        snapshotModifiersToCreate.push({
-          modifierGroupName: found.group.name,
-          modifierOptionName: found.option.name,
-          priceDelta: delta,
-        });
-      }
-
-      // Verify group constraints (minSelections, maxSelections & required)
-      for (const group of dbProduct.modifierGroups) {
-        const count = groupSelectionsCount.get(group.id) || 0;
-
-        const effectiveMin = group.required
-          ? Math.max(1, group.minSelections ?? 0)
-          : (group.minSelections ?? 0);
-
-        if (effectiveMin > 0 && count < effectiveMin) {
-          return NextResponse.json(
-            {
-              success: false,
-              error: `Please select at least ${effectiveMin} option(s) for "${group.name}" on "${dbProduct.name}".`,
-            },
-            { status: 400 }
-          );
-        }
-
-        if (count > group.maxSelections) {
-          return NextResponse.json(
-            {
-              success: false,
-              error: `You can select at most ${group.maxSelections} option(s) for "${group.name}" on "${dbProduct.name}".`,
-            },
-            { status: 400 }
-          );
-        }
-      }
-
-      const configuredUnitPrice = roundMoney(basePrice + totalModifierDelta);
-
-      validatedItemsToCreate.push({
-        productId: dbProduct.id,
-        productName: dbProduct.name,
-        price: basePrice,
-        configuredUnitPrice,
-        quantity: qty,
-        ...(snapshotModifiersToCreate.length > 0
-          ? {
-              modifiers: {
-                create: snapshotModifiersToCreate,
+          const rawItems = input.items as Array<Record<string, unknown>>;
+          const productIds = rawItems.map((item) => {
+            if (!item || typeof item !== "object") throw new OrderRequestError("Invalid order item.");
+            return requiredText(item.productId, "Product ID", 100);
+          });
+          const products = await tx.product.findMany({
+            where: { id: { in: [...new Set(productIds)] } },
+            include: {
+              modifierGroups: {
+                where: { active: true },
+                include: { options: { where: { active: true } } },
               },
+            },
+          });
+          const productMap = new Map(products.map((product) => [product.id, product]));
+          const createItems: Prisma.OrderItemCreateWithoutOrderInput[] = [];
+
+          for (let itemIndex = 0; itemIndex < rawItems.length; itemIndex++) {
+            const rawItem = rawItems[itemIndex];
+            const product = productMap.get(productIds[itemIndex]);
+            if (!product) throw new OrderRequestError("One or more cart items no longer exist. Please refresh your cart.", 409);
+            if (!product.available) throw new OrderRequestError(`"${product.name}" is currently unavailable. Please remove it from your cart.`, 409);
+
+            const quantity = Number(rawItem.quantity);
+            if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_QUANTITY) {
+              throw new OrderRequestError(`Quantity for "${product.name}" must be between 1 and ${MAX_QUANTITY}.`);
             }
-          : {}),
-      });
+            if (rawItem.selectedModifierOptionIds !== undefined && !Array.isArray(rawItem.selectedModifierOptionIds)) {
+              throw new OrderRequestError(`Invalid modifier selections for "${product.name}".`);
+            }
+            const optionIds = (rawItem.selectedModifierOptionIds ?? []) as unknown[];
+            if (optionIds.length > 50 || optionIds.some((id) => typeof id !== "string" || !id)) {
+              throw new OrderRequestError(`Invalid modifier selections for "${product.name}".`);
+            }
+            if (new Set(optionIds).size !== optionIds.length) {
+              throw new OrderRequestError(`Duplicate modifier selections are not allowed for "${product.name}".`);
+            }
+
+            const options = new Map<string, { option: { name: string; priceDelta: number }; group: typeof product.modifierGroups[number] }>();
+            const groupCounts = new Map<string, number>();
+            for (const group of product.modifierGroups) {
+              groupCounts.set(group.id, 0);
+              for (const option of group.options) options.set(option.id, { option, group });
+            }
+
+            let modifierTotal = 0;
+            const modifierSnapshots: Prisma.OrderItemModifierCreateWithoutOrderItemInput[] = [];
+            for (const optionId of optionIds) {
+              const selected = options.get(optionId as string);
+              if (!selected) {
+                throw new OrderRequestError(`A modifier for "${product.name}" changed or is unavailable. Please reconfigure it.`, 409);
+              }
+              groupCounts.set(selected.group.id, (groupCounts.get(selected.group.id) ?? 0) + 1);
+              const priceDelta = roundMoney(selected.option.priceDelta);
+              modifierTotal = roundMoney(modifierTotal + priceDelta);
+              modifierSnapshots.push({
+                modifierGroupName: selected.group.name,
+                modifierOptionName: selected.option.name,
+                priceDelta,
+              });
+            }
+
+            for (const group of product.modifierGroups) {
+              const count = groupCounts.get(group.id) ?? 0;
+              const minimum = group.required ? Math.max(1, group.minSelections) : group.minSelections;
+              if (count < minimum) throw new OrderRequestError(`Please select at least ${minimum} option(s) for "${group.name}" on "${product.name}".`);
+              if (count > group.maxSelections) throw new OrderRequestError(`You can select at most ${group.maxSelections} option(s) for "${group.name}" on "${product.name}".`);
+            }
+
+            const basePrice = roundMoney(product.price);
+            const configuredUnitPrice = roundMoney(basePrice + modifierTotal);
+            if (configuredUnitPrice < 0) throw new OrderRequestError(`Invalid configured price for "${product.name}".`, 409);
+            createItems.push({
+              product: { connect: { id: product.id } },
+              productName: product.name,
+              price: basePrice,
+              configuredUnitPrice,
+              quantity,
+              ...(modifierSnapshots.length ? { modifiers: { create: modifierSnapshots } } : {}),
+            });
+          }
+
+          const totals = calculateOrderTotals(
+            createItems.map((item) => ({ price: Number(item.configuredUnitPrice), quantity: Number(item.quantity) })),
+            orderType,
+            Number(settings.deliveryFee)
+          );
+          return tx.order.create({
+            data: {
+              orderNumber: generateOrderNumber(),
+              idempotencyKey,
+              customerName,
+              customerPhone,
+              customerAddress,
+              orderType,
+              status: "PENDING",
+              allergies,
+              notes,
+              ...totals,
+              items: { create: createItems },
+            },
+            include: orderInclude,
+          });
+        }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5_000, timeout: 15_000 });
+
+        return NextResponse.json(
+          { success: true, data: withoutIdempotencyKey(order), message: `Order #${order.orderNumber} placed successfully!` },
+          { status: 201 }
+        );
+      } catch (error) {
+        if (error instanceof OrderRequestError) throw error;
+        if (error instanceof Prisma.PrismaClientKnownRequestError) {
+          if (error.code === "P2034" && attempt < 3) continue;
+          if (error.code === "P2002") {
+            const duplicate = await prisma.order.findUnique({ where: { idempotencyKey }, include: orderInclude });
+            if (duplicate) return NextResponse.json({ success: true, data: withoutIdempotencyKey(duplicate), message: `Order #${duplicate.orderNumber} already placed.` });
+            if (attempt < 3) continue;
+          }
+        }
+        throw error;
+      }
     }
-
-    // 4. Authoritative Totals Calculation using Money helper
-    const settingsDeliveryFee = normalizedSettings?.deliveryFee ?? 15;
-    const itemsForTotals = validatedItemsToCreate.map((it) => ({
-      price: it.configuredUnitPrice,
-      quantity: it.quantity,
-    }));
-
-    const { subtotal, deliveryFee, total } = calculateOrderTotals(
-      itemsForTotals,
-      normalizedOrderType,
-      settingsDeliveryFee
-    );
-
-    // 5. Generate Order Number
-    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-    const orderNumber = `ORD-${randomSuffix}`;
-
-    // 6. Create Order and OrderItems in Database
-    const order = await prisma.order.create({
-      data: {
-        orderNumber,
-        customerName: customerName.trim(),
-        customerPhone: customerPhone.trim(),
-        customerAddress: normalizedOrderType === "DELIVERY" ? customerAddress.trim() : null,
-        orderType: normalizedOrderType,
-        status: "PENDING",
-        subtotal,
-        deliveryFee,
-        total,
-        allergies: allergies && typeof allergies === "string" && allergies.trim() ? allergies.trim() : null,
-        notes: notes && typeof notes === "string" ? notes.trim() : null,
-        items: {
-          create: validatedItemsToCreate,
-        },
-      },
-      include: {
-        items: {
-          include: {
-            modifiers: true,
-          },
-        },
-      },
-    });
-
-    return NextResponse.json(
-      {
-        success: true,
-        data: order,
-        message: `Order #${order.orderNumber} placed successfully!`,
-      },
-      { status: 201 }
-    );
+    throw new Error("Order transaction retry limit reached");
   } catch (error) {
-    console.error("Error submitting order:", error);
-    return NextResponse.json(
-      { success: false, error: "Could not place your order. Please try again." },
-      { status: 500 }
-    );
+    if (error instanceof OrderRequestError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: error.statusCode });
+    }
+    console.error("Failed to submit order:", error);
+    return NextResponse.json({ success: false, error: "Could not place your order. Please try again." }, { status: 500 });
   }
 }

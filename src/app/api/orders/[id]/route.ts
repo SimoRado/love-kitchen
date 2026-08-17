@@ -19,6 +19,9 @@ export async function GET(
   request: NextRequest,
   { params }: RouteParams
 ) {
+  const authError = await requireAdminAuth(request);
+  if (authError) return authError;
+
   try {
     const { id } = await params;
     const order = await prisma.order.findUnique({
@@ -39,7 +42,8 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({ success: true, data: order });
+    const safeOrder = { ...order, idempotencyKey: undefined };
+    return NextResponse.json({ success: true, data: safeOrder });
   } catch (error) {
     console.error("Error fetching order:", error);
     return NextResponse.json(

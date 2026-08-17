@@ -80,14 +80,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const min = Number(minSelections);
     const max = Number(maxSelections);
 
-    if (isNaN(min) || min < 0) {
+    if (!Number.isInteger(min) || min < 0) {
       return NextResponse.json(
         { success: false, error: "Minimum selections must be 0 or greater" },
         { status: 400 }
       );
     }
 
-    if (isNaN(max) || max < 1) {
+    if (!Number.isInteger(max) || max < 1) {
       return NextResponse.json(
         { success: false, error: "Maximum selections must be at least 1" },
         { status: 400 }
@@ -128,11 +128,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       displayOrder: number;
     }> = [];
 
+    if (!Array.isArray(options) || options.length > 100) {
+      return NextResponse.json(
+        { success: false, error: "Modifier options must be an array of at most 100 items" },
+        { status: 400 }
+      );
+    }
+
     if (Array.isArray(options)) {
       for (let i = 0; i < options.length; i++) {
         const opt = options[i];
         if (opt && opt.name && typeof opt.name === "string" && opt.name.trim()) {
           const delta = typeof opt.priceDelta === "number" ? opt.priceDelta : parseFloat(opt.priceDelta);
+          if (!Number.isFinite(delta) || delta < 0) {
+            return NextResponse.json(
+              { success: false, error: `Invalid price for modifier option ${i + 1}` },
+              { status: 400 }
+            );
+          }
           formattedOptions.push({
             name: opt.name.trim(),
             priceDelta: roundMoney(isNaN(delta) || delta < 0 ? 0 : delta),
@@ -222,9 +235,29 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const min = minSelections !== undefined ? Number(minSelections) : existingGroup.minSelections;
     const max = maxSelections !== undefined ? Number(maxSelections) : existingGroup.maxSelections;
 
-    if (min < 0 || max < 1 || min > max) {
+    if (!Number.isInteger(min) || !Number.isInteger(max) || min < 0 || max < 1 || min > max) {
       return NextResponse.json(
         { success: false, error: "Invalid min or max selections configuration" },
+        { status: 400 }
+      );
+    }
+
+    const effectiveRequired = required !== undefined ? required : existingGroup.required;
+    if (typeof effectiveRequired !== "boolean" || (effectiveRequired && min < 1)) {
+      return NextResponse.json(
+        { success: false, error: "Required groups must have minimum selections of at least 1" },
+        { status: 400 }
+      );
+    }
+    if (name !== undefined && (typeof name !== "string" || !name.trim())) {
+      return NextResponse.json(
+        { success: false, error: "Modifier group name is required" },
+        { status: 400 }
+      );
+    }
+    if (options !== undefined && (!Array.isArray(options) || options.length > 100)) {
+      return NextResponse.json(
+        { success: false, error: "Modifier options must be an array of at most 100 items" },
         { status: 400 }
       );
     }
@@ -261,7 +294,13 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         if (!opt.name || !opt.name.trim()) continue;
 
         const delta = typeof opt.priceDelta === "number" ? opt.priceDelta : parseFloat(opt.priceDelta);
-        const priceDelta = roundMoney(isNaN(delta) || delta < 0 ? 0 : delta);
+          if (!Number.isFinite(delta) || delta < 0) {
+            return NextResponse.json(
+              { success: false, error: `Invalid price for modifier option ${i + 1}` },
+              { status: 400 }
+            );
+          }
+          const priceDelta = roundMoney(delta);
         const optActive = opt.active !== undefined ? Boolean(opt.active) : true;
         const optOrder = opt.displayOrder !== undefined ? Number(opt.displayOrder) : i;
 
@@ -332,7 +371,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     if (groupId) {
-      // Explicit group deletion (cascade deletes current options in SQLite, historical OrderItemModifiers untouched)
+      // Cascade deletes current options; historical OrderItemModifier snapshots remain untouched.
       const existing = await prisma.productModifierGroup.findFirst({
         where: { id: groupId, productId },
       });

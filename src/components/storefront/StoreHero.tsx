@@ -3,13 +3,7 @@
 import React from "react";
 import { ArrowDown, Bike, ShoppingBag } from "lucide-react";
 
-interface StoreHeroProps {
-  restaurantName?: string;
-}
-
-export default function StoreHero({
-  restaurantName = "Love Kitchen",
-}: StoreHeroProps) {
+export default function StoreHero() {
   const handleScrollToMenu = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
     const menuEl = document.getElementById("menu");

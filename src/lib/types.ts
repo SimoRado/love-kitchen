@@ -139,6 +139,7 @@ export interface CartItem {
   quantity: number;
   selectedModifiers: SelectedModifierOptionSnapshot[];
   configuredUnitPrice: number;
+  configurationInvalid?: boolean;
 }
 
 export interface DashboardStats {

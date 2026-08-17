@@ -72,6 +72,7 @@ export default function StorefrontPage() {
   }, [reconcileCart]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load remote storefront data after mount
     fetchData();
   }, [fetchData]);
 
@@ -137,7 +138,7 @@ export default function StorefrontPage() {
       />
 
       {/* 2. Hero Section */}
-      <StoreHero restaurantName={settings?.name || "Dark Kitchen"} />
+      <StoreHero />
 
       {/* 3. Restaurant Information & Live Status Banner */}
       <StoreStatusBanner settings={settings} openStatus={openStatus} />
