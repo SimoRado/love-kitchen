@@ -11,6 +11,7 @@ interface MenuGridProps {
   activeCategoryId: string;
   currency?: string;
   isRestaurantOpen: boolean;
+  onConfigureProduct?: (product: Product) => void;
 }
 
 export default function MenuGrid({
@@ -19,6 +20,7 @@ export default function MenuGrid({
   activeCategoryId,
   currency = "MAD",
   isRestaurantOpen,
+  onConfigureProduct,
 }: MenuGridProps) {
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -114,6 +116,7 @@ export default function MenuGrid({
               product={product}
               currency={currency}
               isRestaurantOpen={isRestaurantOpen}
+              onConfigureProduct={onConfigureProduct}
             />
           ))}
         </div>

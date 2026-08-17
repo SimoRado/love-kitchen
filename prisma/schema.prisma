@@ -103,10 +103,12 @@ model OrderItemModifier {
 
 model RestaurantSettings {
   id             String        @id @default("default")
-  name           String        @default("Love Kitchen")
+  name           String        @default("Dark Kitchen")
   subtitle       String?       @default("Artisanal Kitchen & Delivery")
   phone          String        @default("+212 522 123456")
-  address        String        @default("72 Boulevard Massira Khadra, Casablanca")
+  address        String        @default("N° 6, quartier les princesses, Résidence Miradore A, Rue Al Jounaid Arsat Lakbir, Casablanca")
+  googleMapsUrl  String?
+  whatsappNumber String?
   currency       String        @default("MAD")
   deliveryFee    Float         @default(15)
   isOpenOverride Boolean?      // null = schedule-based, true = force open, false = force closed

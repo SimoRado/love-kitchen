@@ -234,7 +234,7 @@ export default function CheckoutPage() {
           </Link>
 
           <span className="font-bold text-base text-slate-900 font-serif">
-            {settings?.name || "Love Kitchen"} • Checkout
+            {settings?.name || "Dark Kitchen"} • Checkout
           </span>
 
           <div className="w-16" />

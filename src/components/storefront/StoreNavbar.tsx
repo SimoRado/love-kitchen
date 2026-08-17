@@ -5,23 +5,29 @@ import Link from "next/link";
 import { ShoppingBag } from "lucide-react";
 import { useCartStore } from "@/store/useCartStore";
 import { RestaurantOpenStatus } from "@/lib/openingHoursHelper";
-import { RESTAURANT_MAPS_URL } from "@/lib/constants";
+import { getRestaurantMapsUrl } from "@/lib/constants";
+import { RestaurantSettings } from "@/lib/types";
 
 interface StoreNavbarProps {
   restaurantName?: string;
   restaurantSubtitle?: string | null;
+  settings?: RestaurantSettings | null;
+  googleMapsUrl?: string | null;
   openStatus: RestaurantOpenStatus;
   onOpenCart: () => void;
 }
 
 export default function StoreNavbar({
-  restaurantName = "Love Kitchen",
+  restaurantName = "Dark Kitchen",
   restaurantSubtitle,
+  settings,
+  googleMapsUrl,
   openStatus,
   onOpenCart,
 }: StoreNavbarProps) {
   const itemCount = useCartStore((state) => state.getItemCount());
   const hasSubtitle = Boolean(restaurantSubtitle && restaurantSubtitle.trim());
+  const mapsUrl = getRestaurantMapsUrl(settings || { googleMapsUrl, name: restaurantName });
 
   return (
     <header className="sticky top-0 z-30 bg-[#FFFDF9]/95 backdrop-blur-md border-b border-[#EBE3D5] transition-all">
@@ -64,7 +70,7 @@ export default function StoreNavbar({
           </a>
 
           <a
-            href={RESTAURANT_MAPS_URL}
+            href={mapsUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="hidden sm:inline-flex text-xs font-medium uppercase tracking-wider text-slate-600 hover:text-primary transition-colors py-2 px-3"

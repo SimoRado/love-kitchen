@@ -5,18 +5,21 @@ import { Plus, Check, UtensilsCrossed, Sparkles } from "lucide-react";
 import { Product, SelectedModifierOptionSnapshot } from "@/lib/types";
 import { formatCurrency } from "@/lib/formatters";
 import { useCartStore } from "@/store/useCartStore";
+import { hasActiveModifiers } from "@/lib/constants";
 import ProductConfigModal from "./ProductConfigModal";
 
 interface ProductCardProps {
   product: Product;
   currency?: string;
   isRestaurantOpen: boolean;
+  onConfigureProduct?: (product: Product) => void;
 }
 
 export default function ProductCard({
   product,
   currency = "MAD",
   isRestaurantOpen,
+  onConfigureProduct,
 }: ProductCardProps) {
   const addItem = useCartStore((state) => state.addItem);
   const [justAdded, setJustAdded] = useState(false);
@@ -24,19 +27,20 @@ export default function ProductCard({
 
   const isAvailable = product.available;
   const canOrder = isRestaurantOpen && isAvailable;
+  const productHasModifiers = hasActiveModifiers(product);
 
-  const hasActiveModifiers = Boolean(
-    product.modifierGroups &&
-      product.modifierGroups.some(
-        (g) => g.active && g.options && g.options.some((o) => o.active)
-      )
-  );
-
-  const handleAddToCartClick = () => {
+  const handleAddToCartClick = (e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+    }
     if (!canOrder) return;
 
-    if (hasActiveModifiers) {
-      setIsConfigModalOpen(true);
+    if (productHasModifiers) {
+      if (onConfigureProduct) {
+        onConfigureProduct(product);
+      } else {
+        setIsConfigModalOpen(true);
+      }
       return;
     }
 
@@ -67,7 +71,10 @@ export default function ProductCard({
             : "border-[#EBE3D5] hover:border-primary/40 hover:shadow-xs"
         }`}
       >
-        <div>
+        <div
+          onClick={canOrder ? (e) => handleAddToCartClick(e) : undefined}
+          className={canOrder ? "cursor-pointer" : ""}
+        >
           {/* Product Image Area */}
           <div className="relative aspect-[4/3] sm:aspect-[16/10] bg-slate-100 overflow-hidden">
             {product.image ? (
@@ -95,7 +102,7 @@ export default function ProductCard({
                 <div className="bg-slate-900/80 text-white text-[10px] sm:text-[11px] font-medium px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-md backdrop-blur-xs shadow-xs">
                   Unavailable
                 </div>
-              ) : hasActiveModifiers ? (
+              ) : productHasModifiers ? (
                 <div className="bg-orange-600/90 text-white text-[9px] sm:text-[10px] font-semibold px-2 py-0.5 rounded-md backdrop-blur-xs shadow-xs flex items-center gap-1">
                   <Sparkles className="w-2.5 h-2.5" />
                   <span>Customizable</span>
@@ -136,7 +143,7 @@ export default function ProductCard({
             <span className="text-xs sm:text-base font-semibold text-slate-900 tracking-tight whitespace-nowrap">
               {formatCurrency(product.price, currency)}
             </span>
-            {hasActiveModifiers && (
+            {productHasModifiers && (
               <span className="text-[10px] text-slate-400 font-normal">
                 Base price
               </span>
@@ -146,7 +153,7 @@ export default function ProductCard({
           {/* Add to Cart Button */}
           <button
             type="button"
-            onClick={handleAddToCartClick}
+            onClick={(e) => handleAddToCartClick(e)}
             disabled={!canOrder}
             className={`w-full sm:w-auto inline-flex items-center justify-center gap-1 sm:gap-1.5 py-1.5 px-2.5 sm:px-3.5 sm:py-2 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-medium sm:font-semibold transition-all active:scale-95 cursor-pointer shrink-0 ${
               !isRestaurantOpen
@@ -167,7 +174,7 @@ export default function ProductCard({
                 <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                 <span>Added</span>
               </>
-            ) : hasActiveModifiers ? (
+            ) : productHasModifiers ? (
               <>
                 <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                 <span>Customize</span>
@@ -182,8 +189,8 @@ export default function ProductCard({
         </div>
       </div>
 
-      {/* Product Configuration Modal */}
-      {hasActiveModifiers && (
+      {/* Fallback Product Configuration Modal if standalone */}
+      {!onConfigureProduct && productHasModifiers && (
         <ProductConfigModal
           isOpen={isConfigModalOpen}
           product={product}

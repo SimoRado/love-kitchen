@@ -34,6 +34,8 @@ export async function GET() {
         subtitle: string | null;
         phone: string;
         address: string;
+        googleMapsUrl: string | null;
+        whatsappNumber: string | null;
         currency: string;
         deliveryFee: number;
         isOpenOverride: boolean | number | string | null;
@@ -45,8 +47,8 @@ export async function GET() {
 
     if (!settings) {
       await prisma.$executeRawUnsafe(
-        `INSERT INTO "RestaurantSettings" ("id", "name", "subtitle", "phone", "address", "currency", "deliveryFee", "isOpenOverride", "isAutoHours", "createdAt", "updatedAt") 
-         VALUES ('default', 'Love Kitchen', 'Artisanal Kitchen & Delivery', '+212 522 123456', '72 Boulevard Massira Khadra, Casablanca', 'MAD', 15, NULL, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+        `INSERT INTO "RestaurantSettings" ("id", "name", "subtitle", "phone", "address", "googleMapsUrl", "whatsappNumber", "currency", "deliveryFee", "isOpenOverride", "isAutoHours", "createdAt", "updatedAt") 
+         VALUES ('default', 'Dark Kitchen', 'Artisanal Kitchen & Delivery', '+212 522 123456', 'N° 6, quartier les princesses, Résidence Miradore A, Rue Al Jounaid Arsat Lakbir, Casablanca', NULL, NULL, 'MAD', 15, NULL, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
       );
 
       for (const d of DEFAULT_DAYS) {
@@ -86,6 +88,8 @@ export async function GET() {
       subtitle: settings.subtitle ?? null,
       phone: settings.phone,
       address: settings.address,
+      googleMapsUrl: settings.googleMapsUrl ?? null,
+      whatsappNumber: settings.whatsappNumber ?? null,
       currency: settings.currency || "MAD",
       deliveryFee: roundMoney(Number(settings.deliveryFee ?? 15)),
       isOpenOverride: parsedIsOpenOverride,
@@ -114,6 +118,8 @@ export async function PUT(request: NextRequest) {
       subtitle,
       phone,
       address,
+      googleMapsUrl,
+      whatsappNumber,
       currency,
       deliveryFee,
       isOpenOverride,
@@ -130,7 +136,7 @@ export async function PUT(request: NextRequest) {
     const effectiveName =
       name !== undefined && typeof name === "string" && name.trim() !== ""
         ? name.trim()
-        : existing?.name ?? "Love Kitchen";
+        : existing?.name ?? "Dark Kitchen";
 
     const sanitizedSubtitle =
       subtitle !== undefined
@@ -145,7 +151,25 @@ export async function PUT(request: NextRequest) {
         : Number(existing?.deliveryFee ?? 15);
 
     const effectivePhone = phone !== undefined ? phone.trim() : (existing?.phone ?? "+212 522 123456");
-    const effectiveAddress = address !== undefined ? address.trim() : (existing?.address ?? "72 Boulevard Massira Khadra, Casablanca");
+    const effectiveAddress =
+      address !== undefined
+        ? address.trim()
+        : (existing?.address ?? "N° 6, quartier les princesses, Résidence Miradore A, Rue Al Jounaid Arsat Lakbir, Casablanca");
+
+    const sanitizedGoogleMapsUrl =
+      googleMapsUrl !== undefined
+        ? googleMapsUrl !== null && typeof googleMapsUrl === "string" && googleMapsUrl.trim() !== ""
+          ? googleMapsUrl.trim()
+          : null
+        : (existing?.googleMapsUrl ?? null);
+
+    const sanitizedWhatsappNumber =
+      whatsappNumber !== undefined
+        ? whatsappNumber !== null && typeof whatsappNumber === "string" && whatsappNumber.trim() !== ""
+          ? whatsappNumber.trim()
+          : null
+        : (existing?.whatsappNumber ?? null);
+
     const effectiveCurrency = currency !== undefined ? currency.trim() : (existing?.currency ?? "MAD");
     
     // Normalize override input: true => 1, false => 0, null => NULL
@@ -159,12 +183,14 @@ export async function PUT(request: NextRequest) {
 
     if (!existing) {
       await prisma.$executeRawUnsafe(
-        `INSERT INTO "RestaurantSettings" ("id", "name", "subtitle", "phone", "address", "currency", "deliveryFee", "isOpenOverride", "isAutoHours", "createdAt", "updatedAt") 
-         VALUES ('default', ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        `INSERT INTO "RestaurantSettings" ("id", "name", "subtitle", "phone", "address", "googleMapsUrl", "whatsappNumber", "currency", "deliveryFee", "isOpenOverride", "isAutoHours", "createdAt", "updatedAt") 
+         VALUES ('default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
         effectiveName,
         sanitizedSubtitle,
         effectivePhone,
         effectiveAddress,
+        sanitizedGoogleMapsUrl,
+        sanitizedWhatsappNumber,
         effectiveCurrency,
         numericDeliveryFee,
         effectiveIsOpenOverride,
@@ -173,12 +199,14 @@ export async function PUT(request: NextRequest) {
     } else {
       await prisma.$executeRawUnsafe(
         `UPDATE "RestaurantSettings" 
-         SET "name" = ?, "subtitle" = ?, "phone" = ?, "address" = ?, "currency" = ?, "deliveryFee" = ?, "isOpenOverride" = ?, "isAutoHours" = ?, "updatedAt" = CURRENT_TIMESTAMP 
+         SET "name" = ?, "subtitle" = ?, "phone" = ?, "address" = ?, "googleMapsUrl" = ?, "whatsappNumber" = ?, "currency" = ?, "deliveryFee" = ?, "isOpenOverride" = ?, "isAutoHours" = ?, "updatedAt" = CURRENT_TIMESTAMP 
          WHERE "id" = 'default'`,
         effectiveName,
         sanitizedSubtitle,
         effectivePhone,
         effectiveAddress,
+        sanitizedGoogleMapsUrl,
+        sanitizedWhatsappNumber,
         effectiveCurrency,
         numericDeliveryFee,
         effectiveIsOpenOverride,
@@ -239,6 +267,8 @@ export async function PUT(request: NextRequest) {
       subtitle: updated.subtitle ?? null,
       phone: updated.phone,
       address: updated.address,
+      googleMapsUrl: updated.googleMapsUrl ?? null,
+      whatsappNumber: updated.whatsappNumber ?? null,
       currency: updated.currency || "MAD",
       deliveryFee: roundMoney(Number(updated.deliveryFee ?? 15)),
       isOpenOverride: parsedIsOpenOverride,

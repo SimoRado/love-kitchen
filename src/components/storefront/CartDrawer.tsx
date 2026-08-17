@@ -1,12 +1,14 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { X, ShoppingBag, Plus, Minus, Trash2, ArrowRight, AlertTriangle, Edit2 } from "lucide-react";
 import { useCartStore } from "@/store/useCartStore";
 import { formatCurrency } from "@/lib/formatters";
 import { calculateItemTotal } from "@/lib/money";
 import { CartItem, SelectedModifierOptionSnapshot } from "@/lib/types";
+import { useBodyScrollLock } from "@/lib/useBodyScrollLock";
 import ProductConfigModal from "./ProductConfigModal";
 
 interface CartDrawerProps {
@@ -22,6 +24,7 @@ export default function CartDrawer({
   isRestaurantOpen,
   onClose,
 }: CartDrawerProps) {
+  const [mounted, setMounted] = useState(false);
   const {
     items,
     updateQuantity,
@@ -34,6 +37,29 @@ export default function CartDrawer({
   } = useCartStore();
 
   const [editingCartItem, setEditingCartItem] = useState<CartItem | null>(null);
+
+  // Lock background body scroll cleanly while drawer is open
+  useBodyScrollLock(isOpen);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Escape key listener
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (!editingCartItem) {
+          onClose();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, editingCartItem, onClose]);
 
   const itemCount = getItemCount();
   const subtotal = getSubtotal();
@@ -48,22 +74,26 @@ export default function CartDrawer({
     setEditingCartItem(null);
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
-  return (
+  const drawerContent = (
     <>
-      <div className="fixed inset-0 z-50 overflow-hidden">
+      <div
+        className="fixed inset-0 z-50 overflow-hidden"
+        style={{ overscrollBehavior: "contain" }}
+      >
         {/* Backdrop */}
         <div
           className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity"
           onClick={onClose}
+          onTouchMove={(e) => e.preventDefault()}
         />
 
         {/* Slide-out Panel */}
-        <div className="fixed inset-y-0 right-0 max-w-full flex pl-6 sm:pl-10">
-          <div className="w-screen max-w-md bg-white shadow-2xl flex flex-col justify-between border-l border-slate-200">
-            {/* Drawer Header */}
-            <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-orange-50/30">
+        <div className="fixed inset-y-0 right-0 max-w-full flex pl-6 sm:pl-10 h-full max-h-[100dvh] h-[100dvh]">
+          <div className="w-screen max-w-md bg-white shadow-2xl flex flex-col justify-between border-l border-slate-200 h-full max-h-[100dvh] h-[100dvh] overflow-hidden">
+            {/* Drawer Header (Fixed at top) */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-orange-50/30 shrink-0">
               <div className="flex items-center gap-2">
                 <ShoppingBag className="w-5 h-5 text-primary" />
                 <h3 className="font-semibold text-base text-slate-900">Your Order</h3>
@@ -91,8 +121,11 @@ export default function CartDrawer({
               </div>
             </div>
 
-            {/* Items List */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5">
+            {/* Items List (Scrollable middle container with isolated scrolling) */}
+            <div
+              className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 overscroll-contain"
+              style={{ overscrollBehavior: "contain", WebkitOverflowScrolling: "touch" }}
+            >
               {items.length === 0 ? (
                 <div className="py-20 text-center text-slate-400">
                   <ShoppingBag className="w-12 h-12 mx-auto opacity-20 mb-3" />
@@ -223,9 +256,9 @@ export default function CartDrawer({
               )}
             </div>
 
-            {/* Drawer Footer */}
+            {/* Drawer Footer (Fixed at bottom) */}
             {items.length > 0 && (
-              <div className="p-4 sm:p-5 border-t border-slate-100 bg-slate-50/50 space-y-3.5">
+              <div className="p-4 sm:p-5 border-t border-slate-100 bg-slate-50/50 space-y-3.5 shrink-0">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-slate-600 font-medium">Subtotal</span>
                   <span className="font-semibold text-slate-900 text-base">
@@ -278,4 +311,6 @@ export default function CartDrawer({
       )}
     </>
   );
+
+  return createPortal(drawerContent, document.body);
 }

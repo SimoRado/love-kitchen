@@ -16,10 +16,14 @@ import {
   Phone,
   MapPin,
   Coins,
+  MessageCircle,
+  Navigation,
+  ExternalLink,
 } from "lucide-react";
 import LoadingState from "@/components/LoadingState";
 import { RestaurantSettings, OpeningHour } from "@/lib/types";
 import { useToast } from "@/components/ToastContext";
+import { normalizeWhatsAppNumber } from "@/lib/constants";
 
 const ORDERED_DAYS = [
   { dayOfWeek: 1, name: "Monday" },
@@ -42,6 +46,8 @@ export default function SettingsPage() {
   const [subtitle, setSubtitle] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
+  const [googleMapsUrl, setGoogleMapsUrl] = useState("");
+  const [whatsappNumber, setWhatsappNumber] = useState("");
   const [currency, setCurrency] = useState("MAD");
   const [deliveryFee, setDeliveryFee] = useState("15");
   const [isOpenOverride, setIsOpenOverride] = useState<boolean | null>(null);
@@ -59,6 +65,8 @@ export default function SettingsPage() {
         setSubtitle(s.subtitle || "");
         setPhone(s.phone || "");
         setAddress(s.address || "");
+        setGoogleMapsUrl(s.googleMapsUrl || "");
+        setWhatsappNumber(s.whatsappNumber || "");
         setCurrency(s.currency || "MAD");
         setDeliveryFee(s.deliveryFee !== undefined ? s.deliveryFee.toString() : "15");
         setIsOpenOverride(s.isOpenOverride);
@@ -113,6 +121,15 @@ export default function SettingsPage() {
       showToast("Restaurant name cannot be empty.", "error");
       return;
     }
+
+    if (whatsappNumber.trim() && !normalizeWhatsAppNumber(whatsappNumber)) {
+      showToast(
+        "Please enter a valid WhatsApp phone number (e.g. 0612345678 or +212 612 345 678), or leave it empty.",
+        "error"
+      );
+      return;
+    }
+
     if (isSaving) return;
 
     try {
@@ -122,6 +139,8 @@ export default function SettingsPage() {
         subtitle: subtitle.trim() || null,
         phone: phone.trim(),
         address: address.trim(),
+        googleMapsUrl: googleMapsUrl.trim() || null,
+        whatsappNumber: whatsappNumber.trim() || null,
         currency: currency.trim() || "MAD",
         deliveryFee: parseFloat(deliveryFee) || 0,
         isOpenOverride,
@@ -261,6 +280,57 @@ export default function SettingsPage() {
                 className="w-full pl-10 pr-3.5 py-2.5 rounded-lg border border-border text-sm bg-surface transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
               />
             </div>
+          </div>
+
+          {/* Google Maps URL */}
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-text-muted mb-1.5">
+              Google Maps Link
+            </label>
+            <div className="relative">
+              <Navigation className="w-4 h-4 text-text-muted absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="url"
+                value={googleMapsUrl}
+                onChange={(e) => setGoogleMapsUrl(e.target.value)}
+                placeholder="https://maps.google.com/..."
+                className="w-full pl-10 pr-3.5 py-2.5 rounded-lg border border-border text-sm bg-surface transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              />
+            </div>
+            <p className="text-[11px] text-text-muted mt-1">
+              Direct place or share link for Dark Kitchen. When set, storefront location buttons open this destination directly.
+            </p>
+          </div>
+
+          {/* WhatsApp Number */}
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-text-muted mb-1.5">
+              WhatsApp Number
+            </label>
+            <div className="relative">
+              <MessageCircle className="w-4 h-4 text-emerald-600 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={whatsappNumber}
+                onChange={(e) => setWhatsappNumber(e.target.value)}
+                placeholder="e.g. +212 612 345 678 or 0612345678"
+                className="w-full pl-10 pr-3.5 py-2.5 rounded-lg border border-border text-sm bg-surface transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              />
+            </div>
+            <p className="text-[11px] text-text-muted mt-1">
+              Enables customer floating WhatsApp button. Local Moroccan (06...) and international formats (+212...) are formatted automatically. Leave empty to hide.
+            </p>
+            {whatsappNumber.trim() && (
+              normalizeWhatsAppNumber(whatsappNumber) ? (
+                <p className="text-[11px] text-emerald-600 font-medium mt-1">
+                  ✓ Link generated: https://wa.me/{normalizeWhatsAppNumber(whatsappNumber)}
+                </p>
+              ) : (
+                <p className="text-[11px] text-amber-600 font-medium mt-1">
+                  ⚠️ Please enter a valid phone number (e.g. 0612345678 or +212 612 345 678)
+                </p>
+              )
+            )}
           </div>
 
           {/* Currency */}

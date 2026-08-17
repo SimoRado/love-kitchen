@@ -114,6 +114,8 @@ export interface RestaurantSettings {
   subtitle?: string | null;
   phone: string;
   address: string;
+  googleMapsUrl?: string | null;
+  whatsappNumber?: string | null;
   currency: string;
   deliveryFee: number;
   isOpenOverride: boolean | null;

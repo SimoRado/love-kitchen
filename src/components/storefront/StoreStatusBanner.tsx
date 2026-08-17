@@ -5,7 +5,7 @@ import { Clock, Phone, MapPin, AlertCircle, Bike } from "lucide-react";
 import { RestaurantSettings } from "@/lib/types";
 import { RestaurantOpenStatus } from "@/lib/openingHoursHelper";
 import { formatCurrency } from "@/lib/formatters";
-import { RESTAURANT_ADDRESS, RESTAURANT_MAPS_URL } from "@/lib/constants";
+import { RESTAURANT_ADDRESS, getRestaurantMapsUrl } from "@/lib/constants";
 
 interface StoreStatusBannerProps {
   settings: RestaurantSettings | null;
@@ -17,6 +17,9 @@ export default function StoreStatusBanner({
   openStatus,
 }: StoreStatusBannerProps) {
   if (!settings) return null;
+
+  const mapsUrl = getRestaurantMapsUrl(settings);
+  const displayAddress = settings.address?.trim() || RESTAURANT_ADDRESS;
 
   return (
     <div id="restaurant-info" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-6 sm:-mt-8 relative z-10 mb-8">
@@ -97,7 +100,7 @@ export default function StoreStatusBanner({
 
           {/* 4. Address (Clickable Google Maps Link) */}
           <a
-            href={RESTAURANT_MAPS_URL}
+            href={mapsUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-3.5 pt-3 sm:pt-0 sm:pl-6 group hover:opacity-95 transition-opacity cursor-pointer"
@@ -111,7 +114,7 @@ export default function StoreStatusBanner({
                 Restaurant Location
               </p>
               <p className="text-xs text-slate-500 font-normal line-clamp-1 mt-0.5">
-                {RESTAURANT_ADDRESS}
+                {displayAddress}
               </p>
             </div>
           </a>

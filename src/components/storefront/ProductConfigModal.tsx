@@ -1,10 +1,13 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { X, Plus, Minus, Check, AlertCircle, UtensilsCrossed } from "lucide-react";
-import { Product, ProductModifierGroup, ProductModifierOption, SelectedModifierOptionSnapshot } from "@/lib/types";
+import { Product, SelectedModifierOptionSnapshot } from "@/lib/types";
 import { formatCurrency } from "@/lib/formatters";
 import { roundMoney } from "@/lib/money";
+import { useBodyScrollLock } from "@/lib/useBodyScrollLock";
+import { getProductActiveModifierGroups } from "@/lib/constants";
 
 interface ProductConfigModalProps {
   isOpen: boolean;
@@ -36,9 +39,17 @@ export default function ProductConfigModal({
   onClose,
   onConfirm,
 }: ProductConfigModalProps) {
+  const [mounted, setMounted] = useState(false);
   const [selectedMap, setSelectedMap] = useState<Map<string, SelectedModifierOptionSnapshot>>(new Map());
   const [quantity, setQuantity] = useState(1);
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Lock background body scroll cleanly
+  useBodyScrollLock(isOpen && Boolean(product));
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Stable initialization key tracking to prevent infinite render loops and accidental state resets
   const initKeyRef = useRef<string | null>(null);
@@ -76,22 +87,10 @@ export default function ProductConfigModal({
     }
   }, [isOpen, product, currentInitKey, initialSelections, initialQuantity]);
 
-  // Lock body scroll and isolate modal scrolling without layout shift
+  // Escape key listener
   useEffect(() => {
     if (!isOpen) return;
 
-    // Capture previous inline styles to restore cleanly
-    const prevOverflow = document.body.style.overflow;
-    const prevPaddingRight = document.body.style.paddingRight;
-
-    // Prevent scrollbar layout shift on desktop
-    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
-    if (scrollbarWidth > 0) {
-      document.body.style.paddingRight = `${scrollbarWidth}px`;
-    }
-    document.body.style.overflow = "hidden";
-
-    // Escape key listener
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         const activeEl = document.activeElement;
@@ -106,27 +105,12 @@ export default function ProductConfigModal({
     };
 
     window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.body.style.overflow = prevOverflow;
-      document.body.style.paddingRight = prevPaddingRight;
-      window.removeEventListener("keydown", handleKeyDown);
-    };
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
 
   // Active modifier groups sorted by display order
   const activeGroups = useMemo(() => {
-    if (!product || !product.modifierGroups) return [];
-    return product.modifierGroups
-      .filter((g) => g.active && g.options && g.options.length > 0)
-      .map((g) => ({
-        ...g,
-        options: g.options
-          .filter((o) => o.active)
-          .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)),
-      }))
-      .filter((g) => g.options.length > 0)
-      .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
+    return getProductActiveModifierGroups(product);
   }, [product]);
 
   // Pricing calculations
@@ -145,32 +129,31 @@ export default function ProductConfigModal({
     return roundMoney(calculatedUnitPrice * safeQuantity);
   }, [calculatedUnitPrice, safeQuantity]);
 
-  if (!isOpen || !product) return null;
+  if (!isOpen || !product || !mounted) return null;
 
   const handleToggleOption = (
-    group: ProductModifierGroup,
-    option: ProductModifierOption
+    group: { id: string; name: string; maxSelections: number; required?: boolean },
+    option: { id: string; name: string; priceDelta: number }
   ) => {
     setValidationError(null);
+
     setSelectedMap((prev) => {
       const next = new Map(prev);
       const isAlreadySelected = next.has(option.id);
 
-      if (group.maxSelections === 1) {
-        // Single selection group (Radio behavior)
-        if (isAlreadySelected) {
-          // If optional (minSelections <= 0 and not required), allow deselecting
-          const isRequired = group.required || (group.minSelections !== undefined && group.minSelections >= 1);
-          if (!isRequired) {
-            next.delete(option.id);
-          }
-        } else {
-          // Remove any previous selection in this group
-          for (const [optId, sel] of next.entries()) {
-            if (sel.groupId === group.id) {
-              next.delete(optId);
+      if (isAlreadySelected) {
+        next.delete(option.id);
+      } else {
+        // Single selection group (radio behavior): Replace existing selection in this group
+        if (group.maxSelections === 1) {
+          const groupKeysToDelete: string[] = [];
+          next.forEach((val, key) => {
+            if (val.groupId === group.id) {
+              groupKeysToDelete.push(key);
             }
-          }
+          });
+          groupKeysToDelete.forEach((k) => next.delete(k));
+
           next.set(option.id, {
             groupId: group.id,
             groupName: group.name,
@@ -178,20 +161,15 @@ export default function ProductConfigModal({
             optionName: option.name,
             priceDelta: roundMoney(Number(option.priceDelta) || 0),
           });
-        }
-      } else {
-        // Multi selection group (Checkbox behavior)
-        if (isAlreadySelected) {
-          next.delete(option.id);
         } else {
-          // Count existing selections in this group
-          let currentGroupSelections = 0;
-          next.forEach((sel) => {
-            if (sel.groupId === group.id) currentGroupSelections++;
+          // Multiple selections: Check max constraints
+          let currentGroupSelectionsCount = 0;
+          next.forEach((val) => {
+            if (val.groupId === group.id) currentGroupSelectionsCount++;
           });
 
-          if (currentGroupSelections >= group.maxSelections) {
-            return prev;
+          if (currentGroupSelectionsCount >= group.maxSelections) {
+            return next; // Block exceeding max selections
           }
 
           next.set(option.id, {
@@ -242,7 +220,7 @@ export default function ProductConfigModal({
     onClose();
   };
 
-  return (
+  const modalContent = (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-hidden"
       style={{ overscrollBehavior: "contain" }}
@@ -256,28 +234,31 @@ export default function ProductConfigModal({
 
       {/* Modal / Bottom Sheet */}
       <div
-        className="relative bg-white rounded-t-3xl sm:rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full max-h-[85vh] flex flex-col z-10 overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+        className="relative bg-white rounded-t-3xl sm:rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full max-h-[90dvh] sm:max-h-[85vh] flex flex-col z-10 overflow-hidden animate-in fade-in zoom-in-95 duration-200"
         style={{ overscrollBehavior: "contain" }}
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Mobile Top Indicator Pill */}
+        <div className="w-10 h-1 rounded-full bg-slate-300 mx-auto sm:hidden mt-2.5 mb-0.5 shrink-0" />
+
         {/* Fixed Header */}
-        <div className="relative p-5 pb-4 border-b border-slate-100 flex items-start justify-between gap-4 bg-orange-50/30 shrink-0">
-          <div className="flex items-center gap-3.5">
+        <div className="relative p-4 sm:p-5 pb-3 sm:pb-4 border-b border-slate-100 flex items-start justify-between gap-3 sm:gap-4 bg-orange-50/30 shrink-0">
+          <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
             {product.image ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={product.image}
                 alt={product.name}
-                className="w-14 h-14 rounded-xl object-cover border border-slate-200 shrink-0"
+                className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl object-cover border border-slate-200 shrink-0"
               />
             ) : (
-              <div className="w-14 h-14 rounded-xl bg-orange-100/60 flex items-center justify-center text-primary shrink-0">
-                <UtensilsCrossed className="w-6 h-6 opacity-60" />
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-orange-100/60 flex items-center justify-center text-primary shrink-0">
+                <UtensilsCrossed className="w-5 h-5 sm:w-6 sm:h-6 opacity-60" />
               </div>
             )}
 
-            <div>
-              <h3 className="font-semibold text-base sm:text-lg text-slate-900 leading-snug">
+            <div className="min-w-0">
+              <h3 className="font-semibold text-base sm:text-lg text-slate-900 leading-snug truncate">
                 {product.name}
               </h3>
               <p className="text-xs font-semibold text-primary mt-0.5">
@@ -288,7 +269,7 @@ export default function ProductConfigModal({
 
           <button
             onClick={onClose}
-            className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+            className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
             aria-label="Close customization dialog"
           >
             <X className="w-5 h-5" />
@@ -297,7 +278,7 @@ export default function ProductConfigModal({
 
         {/* Scrollable Groups & Options Area */}
         <div
-          className="flex-1 overflow-y-auto p-5 space-y-6 overscroll-contain pb-6"
+          className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5 sm:space-y-6 overscroll-contain pb-6"
           style={{ overscrollBehavior: "contain", WebkitOverflowScrolling: "touch" }}
         >
           {product.description && (
@@ -327,13 +308,13 @@ export default function ProductConfigModal({
             return (
               <div
                 key={group.id}
-                className="bg-white rounded-xl border border-slate-200/80 p-4 space-y-3"
+                className="bg-white rounded-xl border border-slate-200/80 p-3.5 sm:p-4 space-y-3"
               >
                 {/* Group Header */}
                 <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
-                  <div>
-                    <h4 className="font-semibold text-sm text-slate-800 flex items-center gap-2">
-                      {group.name}
+                  <div className="min-w-0">
+                    <h4 className="font-semibold text-sm text-slate-800 flex items-center gap-2 flex-wrap">
+                      <span>{group.name}</span>
                       {isGroupRequired && (
                         <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-amber-100 text-amber-800">
                           Required
@@ -364,7 +345,7 @@ export default function ProductConfigModal({
                         type="button"
                         onClick={() => handleToggleOption(group, option)}
                         disabled={isDisabled}
-                        className={`w-full flex items-center justify-between p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                        className={`w-full flex items-center justify-between p-3 rounded-xl border text-left transition-all cursor-pointer min-h-[44px] ${
                           isSelected
                             ? "border-primary bg-orange-50/60 shadow-xs"
                             : isDisabled
@@ -372,7 +353,7 @@ export default function ProductConfigModal({
                             : "border-slate-200 hover:border-slate-300 hover:bg-slate-50/50"
                         }`}
                       >
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
                           {/* Selection indicator */}
                           <div
                             className={`w-5 h-5 rounded-${
@@ -387,7 +368,7 @@ export default function ProductConfigModal({
                           </div>
 
                           <span
-                            className={`text-xs sm:text-sm font-medium ${
+                            className={`text-xs sm:text-sm font-medium truncate ${
                               isSelected ? "text-slate-900 font-semibold" : "text-slate-700"
                             }`}
                           >
@@ -397,7 +378,7 @@ export default function ProductConfigModal({
 
                         {/* Price Delta */}
                         <span
-                          className={`text-xs font-semibold shrink-0 ${
+                          className={`text-xs font-semibold shrink-0 ml-2 ${
                             option.priceDelta > 0
                               ? isSelected
                                 ? "text-primary"
@@ -419,7 +400,7 @@ export default function ProductConfigModal({
         </div>
 
         {/* Fixed Footer Bar: Validation message, quantity, and live total CTA */}
-        <div className="p-4 sm:p-5 border-t border-slate-100 bg-white space-y-3 shrink-0">
+        <div className="p-3.5 sm:p-5 border-t border-slate-100 bg-white space-y-2.5 sm:space-y-3 shrink-0">
           {validationError && (
             <div className="flex items-center gap-2 p-2.5 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs font-medium animate-in fade-in">
               <AlertCircle className="w-4 h-4 shrink-0" />
@@ -467,4 +448,6 @@ export default function ProductConfigModal({
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }

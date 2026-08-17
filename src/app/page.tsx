@@ -10,7 +10,9 @@ import CartSidebar from "@/components/storefront/CartSidebar";
 import MobileCartBar from "@/components/storefront/MobileCartBar";
 import CartDrawer from "@/components/storefront/CartDrawer";
 import StoreFooter from "@/components/storefront/StoreFooter";
-import { Product, Category, RestaurantSettings } from "@/lib/types";
+import WhatsAppFloatingButton from "@/components/storefront/WhatsAppFloatingButton";
+import ProductConfigModal from "@/components/storefront/ProductConfigModal";
+import { Product, Category, RestaurantSettings, SelectedModifierOptionSnapshot } from "@/lib/types";
 import { checkRestaurantOpen, RestaurantOpenStatus } from "@/lib/openingHoursHelper";
 import { useCartStore } from "@/store/useCartStore";
 import { Loader2, RefreshCw } from "lucide-react";
@@ -24,7 +26,9 @@ export default function StorefrontPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isError, setIsError] = useState(false);
   const [isCartDrawerOpen, setIsCartDrawerOpen] = useState(false);
+  const [configuringProduct, setConfiguringProduct] = useState<Product | null>(null);
 
+  const addItem = useCartStore((state) => state.addItem);
   const reconcileCart = useCartStore(
     (state) => state.reconcileWithLatestProducts
   );
@@ -74,6 +78,15 @@ export default function StorefrontPage() {
   const openStatus: RestaurantOpenStatus = checkRestaurantOpen(settings);
   const currency = settings?.currency || "MAD";
 
+  const handleConfigModalConfirm = (
+    selectedModifiers: SelectedModifierOptionSnapshot[],
+    quantity: number
+  ) => {
+    if (!configuringProduct) return;
+    addItem(configuringProduct, quantity, selectedModifiers);
+    setConfiguringProduct(null);
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#FFFDF9] flex flex-col justify-center items-center p-6 text-center">
@@ -81,7 +94,7 @@ export default function StorefrontPage() {
           <Loader2 className="w-6 h-6 animate-spin" />
         </div>
         <h2 className="text-lg font-bold text-slate-800 font-serif">
-          Preparing Love Kitchen Menu...
+          Preparing {settings?.name || "Dark Kitchen"} Menu...
         </h2>
         <p className="text-xs text-slate-500 mt-1">
           Loading fresh items, prices, and daily specials
@@ -116,14 +129,15 @@ export default function StorefrontPage() {
     <div className="min-h-screen bg-[#FFFDF9] text-slate-900 flex flex-col antialiased">
       {/* 1. Navbar */}
       <StoreNavbar
-        restaurantName={settings?.name || "Love Kitchen"}
+        restaurantName={settings?.name || "Dark Kitchen"}
         restaurantSubtitle={settings?.subtitle}
+        settings={settings}
         openStatus={openStatus}
         onOpenCart={() => setIsCartDrawerOpen(true)}
       />
 
       {/* 2. Hero Section */}
-      <StoreHero restaurantName={settings?.name || "Love Kitchen"} />
+      <StoreHero restaurantName={settings?.name || "Dark Kitchen"} />
 
       {/* 3. Restaurant Information & Live Status Banner */}
       <StoreStatusBanner settings={settings} openStatus={openStatus} />
@@ -146,6 +160,7 @@ export default function StorefrontPage() {
               activeCategoryId={activeCategoryId}
               currency={currency}
               isRestaurantOpen={openStatus.isOpen}
+              onConfigureProduct={(product) => setConfiguringProduct(product)}
             />
           </div>
 
@@ -173,7 +188,21 @@ export default function StorefrontPage() {
         onClose={() => setIsCartDrawerOpen(false)}
       />
 
-      {/* 8. Footer (without admin links) */}
+      {/* 8. WhatsApp Floating Button */}
+      <WhatsAppFloatingButton whatsappNumber={settings?.whatsappNumber} />
+
+      {/* 9. Global Product Configuration Modal */}
+      {configuringProduct && (
+        <ProductConfigModal
+          isOpen={Boolean(configuringProduct)}
+          product={configuringProduct}
+          currency={currency}
+          onClose={() => setConfiguringProduct(null)}
+          onConfirm={handleConfigModalConfirm}
+        />
+      )}
+
+      {/* 10. Footer */}
       <StoreFooter settings={settings} />
     </div>
   );

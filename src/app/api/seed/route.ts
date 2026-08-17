@@ -67,6 +67,62 @@ export async function POST(request: NextRequest) {
         image: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=600&auto=format&fit=crop&q=80",
         available: true,
         categoryId: catBurgers.id,
+        modifierGroups: {
+          create: [
+            {
+              name: "Choice of Sauce",
+              description: "Select your favorite sauces (1 to 2)",
+              required: true,
+              minSelections: 1,
+              maxSelections: 2,
+              displayOrder: 1,
+              active: true,
+              options: {
+                create: [
+                  { name: "Algerian Sauce", priceDelta: 0, active: true, displayOrder: 1 },
+                  { name: "Biggy Burger Sauce", priceDelta: 0, active: true, displayOrder: 2 },
+                  { name: "Truffle Mayo", priceDelta: 5, active: true, displayOrder: 3 },
+                  { name: "Garlic Aioli", priceDelta: 4, active: true, displayOrder: 4 },
+                  { name: "Spicy Harissa Mayo", priceDelta: 0, active: true, displayOrder: 5 },
+                ],
+              },
+            },
+            {
+              name: "Extras & Additions",
+              description: "Upgrade your burger with extra goodness",
+              required: false,
+              minSelections: 0,
+              maxSelections: 3,
+              displayOrder: 2,
+              active: true,
+              options: {
+                create: [
+                  { name: "Extra Melted Cheddar", priceDelta: 6, active: true, displayOrder: 1 },
+                  { name: "Crispy Beef Bacon", priceDelta: 12, active: true, displayOrder: 2 },
+                  { name: "Fried Egg", priceDelta: 5, active: true, displayOrder: 3 },
+                  { name: "Extra Prime Beef Patty", priceDelta: 20, active: true, displayOrder: 4 },
+                ],
+              },
+            },
+            {
+              name: "Remove Ingredients",
+              description: "Customize to your taste or dietary preference",
+              required: false,
+              minSelections: 0,
+              maxSelections: 4,
+              displayOrder: 3,
+              active: true,
+              options: {
+                create: [
+                  { name: "No Onions", priceDelta: 0, active: true, displayOrder: 1 },
+                  { name: "No Pickles", priceDelta: 0, active: true, displayOrder: 2 },
+                  { name: "No Tomatoes", priceDelta: 0, active: true, displayOrder: 3 },
+                  { name: "No Sauce", priceDelta: 0, active: true, displayOrder: 4 },
+                ],
+              },
+            },
+          ],
+        },
       },
     });
 
@@ -78,6 +134,40 @@ export async function POST(request: NextRequest) {
         image: "https://images.unsplash.com/photo-1586190848861-99aa4a171e90?w=600&auto=format&fit=crop&q=80",
         available: true,
         categoryId: catBurgers.id,
+        modifierGroups: {
+          create: [
+            {
+              name: "Sauce Selection",
+              description: "Choose up to 2 sauces",
+              required: false,
+              minSelections: 0,
+              maxSelections: 2,
+              displayOrder: 1,
+              active: true,
+              options: {
+                create: [
+                  { name: "BBQ Aioli", priceDelta: 0, active: true, displayOrder: 1 },
+                  { name: "Biggy Sauce", priceDelta: 0, active: true, displayOrder: 2 },
+                  { name: "Spicy Sriracha Mayo", priceDelta: 3, active: true, displayOrder: 3 },
+                ],
+              },
+            },
+            {
+              name: "Add-ons",
+              required: false,
+              minSelections: 0,
+              maxSelections: 2,
+              displayOrder: 2,
+              active: true,
+              options: {
+                create: [
+                  { name: "Extra Crispy Bacon", priceDelta: 12, active: true, displayOrder: 1 },
+                  { name: "Jalapeño Slices", priceDelta: 4, active: true, displayOrder: 2 },
+                ],
+              },
+            },
+          ],
+        },
       },
     });
 

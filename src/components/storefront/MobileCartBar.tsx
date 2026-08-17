@@ -21,7 +21,10 @@ export default function MobileCartBar({
   if (itemCount === 0) return null;
 
   return (
-    <div className="fixed bottom-4 inset-x-4 z-40 lg:hidden animate-in slide-in-from-bottom-5 duration-200">
+    <div
+      style={{ bottom: "calc(16px + env(safe-area-inset-bottom, 0px))" }}
+      className="fixed inset-x-4 z-40 lg:hidden animate-in slide-in-from-bottom-5 duration-200"
+    >
       <button
         onClick={onOpenCart}
         className="w-full bg-primary hover:bg-primary-hover text-white py-3 px-5 rounded-2xl shadow-lg flex items-center justify-between font-medium text-sm transition-all active:scale-98 cursor-pointer"
