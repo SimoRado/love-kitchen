@@ -9,6 +9,7 @@ interface ProductModalProps {
   isOpen: boolean;
   product?: Product | null; // null = create new
   categories: Category[];
+  defaultCategoryId?: string;
   onClose: () => void;
   onSuccess: (savedProduct: Product, isEdit: boolean) => void;
 }
@@ -17,6 +18,7 @@ export default function ProductModal({
   isOpen,
   product,
   categories,
+  defaultCategoryId,
   onClose,
   onSuccess,
 }: ProductModalProps) {
@@ -50,13 +52,13 @@ export default function ProductModal({
         setName("");
         setDescription("");
         setPrice("");
-        setCategoryId(categories.length > 0 ? categories[0].id : "");
+        setCategoryId(defaultCategoryId || (categories.length > 0 ? categories[0].id : ""));
         setImage("");
         setAvailable(true);
       }
       setErrors({});
     }
-  }, [isOpen, product, categories]);
+  }, [isOpen, product, categories, defaultCategoryId]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   if (!isOpen) return null;

@@ -12,6 +12,16 @@ export async function GET() {
         _count: {
           select: { products: true },
         },
+        products: {
+          include: {
+            modifierGroups: {
+              include: {
+                options: true,
+              },
+            },
+          },
+          orderBy: { createdAt: "desc" },
+        },
       },
     });
 

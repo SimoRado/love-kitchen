@@ -9,7 +9,6 @@ import {
   Check,
   AlertCircle,
   Loader2,
-  Sparkles,
   ToggleLeft,
   ToggleRight,
   Layers,
@@ -439,11 +438,11 @@ export default function ProductModifiersModal({
           <div className="px-6 py-4 border-b border-border flex items-center justify-between bg-surface-subtle/50">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
-                <Sparkles className="w-5 h-5" />
+                <Layers className="w-5 h-5" />
               </div>
               <div>
                 <h3 className="font-semibold text-base text-text-main flex items-center gap-2">
-                  Modifiers & Add-ons
+                  Product Options & Add-ons
                   <span className="text-xs font-normal text-text-muted">
                     ({product.name})
                   </span>
@@ -468,7 +467,7 @@ export default function ProductModifiersModal({
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-xs font-semibold text-text-main uppercase tracking-wider">
-                  Modifier Groups ({groups.length})
+                  Option Groups ({groups.length})
                 </span>
                 <p className="text-[11px] text-text-muted">
                   Define required choices (e.g. Size, Sauces) or optional extras.
@@ -482,7 +481,7 @@ export default function ProductModifiersModal({
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-medium shadow-xs transition-all active:scale-95 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>Add Modifier Group</span>
+                  <span>Add Option Group</span>
                 </button>
               )}
             </div>
@@ -495,7 +494,7 @@ export default function ProductModifiersModal({
               >
                 <div className="flex items-center justify-between border-b border-border pb-2">
                   <h4 className="text-xs font-semibold uppercase tracking-wider text-primary">
-                    {editingGroupId ? "Edit Modifier Group" : "New Modifier Group"}
+                    {editingGroupId ? "Edit Option Group" : "New Option Group"}
                   </h4>
                   <button
                     type="button"
@@ -630,13 +629,13 @@ export default function ProductModifiersModal({
             {isLoading ? (
               <div className="py-12 flex flex-col items-center justify-center text-text-muted">
                 <Loader2 className="w-6 h-6 animate-spin mb-2 text-primary" />
-                <span className="text-xs">Loading product modifiers...</span>
+                <span className="text-xs">Loading product options...</span>
               </div>
             ) : groups.length === 0 ? (
               <div className="py-12 text-center text-text-muted border border-dashed border-border rounded-xl">
                 <Layers className="w-8 h-8 mx-auto opacity-30 mb-2" />
                 <p className="text-xs font-medium text-text-main">
-                  No modifier groups configured for this product
+                  No option groups configured for this product
                 </p>
                 <p className="text-[11px] text-text-muted mt-0.5">
                   Customers will be able to add this product directly to their cart without customization.
@@ -928,7 +927,7 @@ export default function ProductModifiersModal({
       {/* Confirm Delete Group Dialog */}
       <ConfirmDialog
         isOpen={Boolean(deleteGroupTarget)}
-        title="Delete Modifier Group"
+        title="Delete Option Group"
         message={`Are you sure you want to delete "${deleteGroupTarget?.name}"? All options within this group will also be deleted.`}
         confirmLabel="Delete Group"
         isLoading={isDeleting}
@@ -939,7 +938,7 @@ export default function ProductModifiersModal({
       {/* Confirm Delete Option Dialog */}
       <ConfirmDialog
         isOpen={Boolean(deleteOptionTarget)}
-        title="Delete Modifier Option"
+        title="Delete Option"
         message={`Are you sure you want to delete "${deleteOptionTarget?.name}"?`}
         confirmLabel="Delete Option"
         isLoading={isDeleting}

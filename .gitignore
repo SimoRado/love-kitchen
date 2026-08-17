@@ -58,3 +58,5 @@ prisma/*.db-wal
 *.tmp
 *.temp
 .cache/
+.vercel
+.env*

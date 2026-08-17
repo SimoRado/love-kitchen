@@ -9,7 +9,7 @@ import {
   Trash2,
   UtensilsCrossed,
   Image as ImageIcon,
-  Sparkles,
+  Layers,
 } from "lucide-react";
 import ProductModal from "@/components/ProductModal";
 import ProductModifiersModal from "@/components/admin/ProductModifiersModal";
@@ -403,16 +403,16 @@ export default function ProductsPage() {
                       {/* Actions */}
                       <td className="py-3.5 px-5 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {/* Modifiers Button */}
+                          {/* Options Button */}
                           <button
                             onClick={() => setSelectedModifierProduct(product)}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-border bg-surface hover:bg-surface-hover text-text-main text-xs font-medium transition-colors cursor-pointer mr-1"
-                            title="Manage add-ons and modifiers"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-surface hover:bg-surface-hover text-text-main text-xs font-medium transition-colors cursor-pointer mr-1"
+                            title="Manage product options and add-ons"
                           >
-                            <Sparkles className="w-3.5 h-3.5 text-primary" />
-                            <span>Modifiers</span>
+                            <Layers className="w-3.5 h-3.5 text-text-muted" />
+                            <span>Options</span>
                             {product.modifierGroups && product.modifierGroups.length > 0 && (
-                              <span className="bg-primary/10 text-primary text-[10px] font-bold px-1.5 py-0.2 rounded-full">
+                              <span className="bg-slate-100 border border-slate-200 text-slate-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full ml-0.5">
                                 {product.modifierGroups.length}
                               </span>
                             )}

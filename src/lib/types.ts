@@ -3,6 +3,7 @@ export interface Category {
   name: string;
   displayOrder: number;
   active: boolean;
+  products?: Product[];
   createdAt: string | Date;
   updatedAt: string | Date;
   _count?: {
