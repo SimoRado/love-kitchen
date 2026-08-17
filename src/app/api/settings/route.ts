@@ -13,75 +13,47 @@ const DEFAULT_DAYS = [
   { dayOfWeek: 0, dayName: "Sunday", openTime: "12:00", closeTime: "23:00", isClosed: false },
 ];
 
-function normalizeOverrideFromDb(raw: any): boolean | null {
-  if (raw === 1 || raw === true || raw === "1" || raw === "true") return true;
-  if (raw === 0 || raw === false || raw === "0" || raw === "false") return false;
-  return null;
-}
-
-function normalizeOverrideToDb(raw: any): number | null {
-  if (raw === true || raw === 1 || raw === "true" || raw === "1") return 1;
-  if (raw === false || raw === 0 || raw === "false" || raw === "0") return 0;
-  return null;
-}
-
 export async function GET() {
   try {
-    const rawSettings = await prisma.$queryRawUnsafe<
-      Array<{
-        id: string;
-        name: string;
-        subtitle: string | null;
-        phone: string;
-        address: string;
-        googleMapsUrl: string | null;
-        whatsappNumber: string | null;
-        currency: string;
-        deliveryFee: number;
-        isOpenOverride: boolean | number | string | null;
-        isAutoHours: boolean | number;
-      }>
-    >('SELECT * FROM "RestaurantSettings" WHERE "id" = "default" LIMIT 1');
-
-    let settings = rawSettings && rawSettings.length > 0 ? rawSettings[0] : null;
-
-    if (!settings) {
-      await prisma.$executeRawUnsafe(
-        `INSERT INTO "RestaurantSettings" ("id", "name", "subtitle", "phone", "address", "googleMapsUrl", "whatsappNumber", "currency", "deliveryFee", "isOpenOverride", "isAutoHours", "createdAt", "updatedAt") 
-         VALUES ('default', 'Dark Kitchen', 'Artisanal Kitchen & Delivery', '+212 522 123456', 'N° 6, quartier les princesses, Résidence Miradore A, Rue Al Jounaid Arsat Lakbir, Casablanca', NULL, NULL, 'MAD', 15, NULL, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
-      );
-
-      for (const d of DEFAULT_DAYS) {
-        await prisma.openingHour.create({
-          data: {
-            dayOfWeek: d.dayOfWeek,
-            dayName: d.dayName,
-            openTime: d.openTime,
-            closeTime: d.closeTime,
-            isClosed: d.isClosed,
-            settingsId: "default",
-          },
-        });
-      }
-
-      const refreshed = await prisma.$queryRawUnsafe<any[]>(
-        'SELECT * FROM "RestaurantSettings" WHERE "id" = "default" LIMIT 1'
-      );
-      settings = refreshed[0];
-    }
-
-    if (!settings) {
-      throw new Error("Restaurant settings could not be retrieved or initialized.");
-    }
-
-    const openingHours = await prisma.openingHour.findMany({
-      where: { settingsId: "default" },
-      orderBy: { dayOfWeek: "asc" },
+    let settings = await prisma.restaurantSettings.findUnique({
+      where: { id: "default" },
+      include: {
+        openingHours: {
+          orderBy: { dayOfWeek: "asc" },
+        },
+      },
     });
 
-    const parsedIsOpenOverride = normalizeOverrideFromDb(settings.isOpenOverride);
+    if (!settings) {
+      settings = await prisma.restaurantSettings.create({
+        data: {
+          id: "default",
+          name: "Dark Kitchen",
+          subtitle: "Artisanal Kitchen & Delivery",
+          phone: "+212 522 123456",
+          address: "N° 6, quartier les princesses, Résidence Miradore A, Rue Al Jounaid Arsat Lakbir, Casablanca",
+          currency: "MAD",
+          deliveryFee: 15,
+          isOpenOverride: null,
+          isAutoHours: true,
+          openingHours: {
+            create: DEFAULT_DAYS.map((d) => ({
+              dayOfWeek: d.dayOfWeek,
+              dayName: d.dayName,
+              openTime: d.openTime,
+              closeTime: d.closeTime,
+              isClosed: d.isClosed,
+            })),
+          },
+        },
+        include: {
+          openingHours: {
+            orderBy: { dayOfWeek: "asc" },
+          },
+        },
+      });
+    }
 
-    // Return public-safe settings data only
     const publicSettings = {
       id: settings.id,
       name: settings.name,
@@ -92,9 +64,9 @@ export async function GET() {
       whatsappNumber: settings.whatsappNumber ?? null,
       currency: settings.currency || "MAD",
       deliveryFee: roundMoney(Number(settings.deliveryFee ?? 15)),
-      isOpenOverride: parsedIsOpenOverride,
+      isOpenOverride: settings.isOpenOverride,
       isAutoHours: Boolean(settings.isAutoHours),
-      openingHours,
+      openingHours: settings.openingHours,
     };
 
     return NextResponse.json({ success: true, data: publicSettings });
@@ -127,11 +99,9 @@ export async function PUT(request: NextRequest) {
       openingHours,
     } = body;
 
-    // Load existing
-    const rawExisting = await prisma.$queryRawUnsafe<any[]>(
-      'SELECT * FROM "RestaurantSettings" WHERE "id" = "default" LIMIT 1'
-    );
-    const existing = rawExisting && rawExisting.length > 0 ? rawExisting[0] : null;
+    const existing = await prisma.restaurantSettings.findUnique({
+      where: { id: "default" },
+    });
 
     const effectiveName =
       name !== undefined && typeof name === "string" && name.trim() !== ""
@@ -171,48 +141,45 @@ export async function PUT(request: NextRequest) {
         : (existing?.whatsappNumber ?? null);
 
     const effectiveCurrency = currency !== undefined ? currency.trim() : (existing?.currency ?? "MAD");
-    
-    // Normalize override input: true => 1, false => 0, null => NULL
+
     const effectiveIsOpenOverride =
       isOpenOverride === undefined
-        ? normalizeOverrideToDb(existing?.isOpenOverride)
-        : normalizeOverrideToDb(isOpenOverride);
+        ? existing?.isOpenOverride
+        : isOpenOverride === null
+        ? null
+        : Boolean(isOpenOverride);
 
     const effectiveIsAutoHours =
-      isAutoHours !== undefined ? (isAutoHours ? 1 : 0) : (existing?.isAutoHours ?? 1);
+      isAutoHours !== undefined ? Boolean(isAutoHours) : (existing?.isAutoHours ?? true);
 
-    if (!existing) {
-      await prisma.$executeRawUnsafe(
-        `INSERT INTO "RestaurantSettings" ("id", "name", "subtitle", "phone", "address", "googleMapsUrl", "whatsappNumber", "currency", "deliveryFee", "isOpenOverride", "isAutoHours", "createdAt", "updatedAt") 
-         VALUES ('default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-        effectiveName,
-        sanitizedSubtitle,
-        effectivePhone,
-        effectiveAddress,
-        sanitizedGoogleMapsUrl,
-        sanitizedWhatsappNumber,
-        effectiveCurrency,
-        numericDeliveryFee,
-        effectiveIsOpenOverride,
-        effectiveIsAutoHours
-      );
-    } else {
-      await prisma.$executeRawUnsafe(
-        `UPDATE "RestaurantSettings" 
-         SET "name" = ?, "subtitle" = ?, "phone" = ?, "address" = ?, "googleMapsUrl" = ?, "whatsappNumber" = ?, "currency" = ?, "deliveryFee" = ?, "isOpenOverride" = ?, "isAutoHours" = ?, "updatedAt" = CURRENT_TIMESTAMP 
-         WHERE "id" = 'default'`,
-        effectiveName,
-        sanitizedSubtitle,
-        effectivePhone,
-        effectiveAddress,
-        sanitizedGoogleMapsUrl,
-        sanitizedWhatsappNumber,
-        effectiveCurrency,
-        numericDeliveryFee,
-        effectiveIsOpenOverride,
-        effectiveIsAutoHours
-      );
-    }
+    const updated = await prisma.restaurantSettings.upsert({
+      where: { id: "default" },
+      create: {
+        id: "default",
+        name: effectiveName,
+        subtitle: sanitizedSubtitle,
+        phone: effectivePhone,
+        address: effectiveAddress,
+        googleMapsUrl: sanitizedGoogleMapsUrl,
+        whatsappNumber: sanitizedWhatsappNumber,
+        currency: effectiveCurrency,
+        deliveryFee: numericDeliveryFee,
+        isOpenOverride: effectiveIsOpenOverride,
+        isAutoHours: effectiveIsAutoHours,
+      },
+      update: {
+        name: effectiveName,
+        subtitle: sanitizedSubtitle,
+        phone: effectivePhone,
+        address: effectiveAddress,
+        googleMapsUrl: sanitizedGoogleMapsUrl,
+        whatsappNumber: sanitizedWhatsappNumber,
+        currency: effectiveCurrency,
+        deliveryFee: numericDeliveryFee,
+        isOpenOverride: effectiveIsOpenOverride,
+        isAutoHours: effectiveIsAutoHours,
+      },
+    });
 
     // Update opening hours if provided
     if (Array.isArray(openingHours)) {
@@ -249,17 +216,10 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    const rawUpdated = await prisma.$queryRawUnsafe<any[]>(
-      'SELECT * FROM "RestaurantSettings" WHERE "id" = "default" LIMIT 1'
-    );
-    const updated = rawUpdated[0];
-
     const updatedOpeningHours = await prisma.openingHour.findMany({
       where: { settingsId: "default" },
       orderBy: { dayOfWeek: "asc" },
     });
-
-    const parsedIsOpenOverride = normalizeOverrideFromDb(updated.isOpenOverride);
 
     const updatedSettings = {
       id: updated.id,
@@ -271,7 +231,7 @@ export async function PUT(request: NextRequest) {
       whatsappNumber: updated.whatsappNumber ?? null,
       currency: updated.currency || "MAD",
       deliveryFee: roundMoney(Number(updated.deliveryFee ?? 15)),
-      isOpenOverride: parsedIsOpenOverride,
+      isOpenOverride: updated.isOpenOverride,
       isAutoHours: Boolean(updated.isAutoHours),
       openingHours: updatedOpeningHours,
     };

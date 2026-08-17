@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { put } from "@vercel/blob";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import { requireAdminAuth } from "@/lib/auth";
@@ -36,9 +37,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-
     const ext = path.extname(file.name) || ".jpg";
     const sanitizedBase = path
       .basename(file.name, ext)
@@ -47,13 +45,36 @@ export async function POST(request: NextRequest) {
       .slice(0, 30);
     const uniqueFilename = `${sanitizedBase}-${Date.now()}${ext}`;
 
-    const uploadDir = path.join(process.cwd(), "public", "uploads", "products");
-    await mkdir(uploadDir, { recursive: true });
+    let publicUrl = "";
 
-    const filePath = path.join(uploadDir, uniqueFilename);
-    await writeFile(filePath, buffer);
-
-    const publicUrl = `/uploads/products/${uniqueFilename}`;
+    // 1. If Vercel Blob token is available or in production with Blob, upload to Vercel Blob
+    if (process.env.BLOB_READ_WRITE_TOKEN) {
+      const blob = await put(`products/${uniqueFilename}`, file, {
+        access: "public",
+        token: process.env.BLOB_READ_WRITE_TOKEN,
+      });
+      publicUrl = blob.url;
+    } else {
+      // 2. Local development fallback to filesystem
+      try {
+        const bytes = await file.arrayBuffer();
+        const buffer = Buffer.from(bytes);
+        const uploadDir = path.join(process.cwd(), "public", "uploads", "products");
+        await mkdir(uploadDir, { recursive: true });
+        const filePath = path.join(uploadDir, uniqueFilename);
+        await writeFile(filePath, buffer);
+        publicUrl = `/uploads/products/${uniqueFilename}`;
+      } catch (localErr) {
+        console.error("Local filesystem write failed and BLOB_READ_WRITE_TOKEN is not configured:", localErr);
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Persistent cloud storage is not configured. Please connect Vercel Blob and set BLOB_READ_WRITE_TOKEN.",
+          },
+          { status: 500 }
+        );
+      }
+    }
 
     return NextResponse.json({
       success: true,

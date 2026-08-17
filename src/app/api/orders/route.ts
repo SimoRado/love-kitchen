@@ -103,27 +103,21 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. Fetch Restaurant Settings & Verify Restaurant is OPEN
-    const rawSettings = await prisma.$queryRawUnsafe<any[]>(
-      'SELECT * FROM "RestaurantSettings" WHERE "id" = "default" LIMIT 1'
-    );
-    const dbSettings = rawSettings && rawSettings.length > 0 ? rawSettings[0] : null;
-
-    const openingHours = await prisma.openingHour.findMany({
-      where: { settingsId: "default" },
-      orderBy: { dayOfWeek: "asc" },
+    const dbSettings = await prisma.restaurantSettings.findUnique({
+      where: { id: "default" },
+      include: {
+        openingHours: {
+          orderBy: { dayOfWeek: "asc" },
+        },
+      },
     });
 
     const normalizedSettings = dbSettings
       ? {
           ...dbSettings,
           deliveryFee: Number(dbSettings.deliveryFee ?? 15),
-          isOpenOverride:
-            dbSettings.isOpenOverride === 1 || dbSettings.isOpenOverride === true
-              ? true
-              : dbSettings.isOpenOverride === 0 || dbSettings.isOpenOverride === false
-              ? false
-              : null,
-          openingHours,
+          isOpenOverride: dbSettings.isOpenOverride,
+          openingHours: dbSettings.openingHours,
         }
       : null;
 
