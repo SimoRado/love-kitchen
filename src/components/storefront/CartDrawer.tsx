@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { X, ShoppingBag, Plus, Minus, Trash2, ArrowRight, AlertTriangle, Edit2 } from "lucide-react";
@@ -25,6 +25,13 @@ export default function CartDrawer({
   onClose,
 }: CartDrawerProps) {
   const [mounted, setMounted] = useState(false);
+  const [isRendered, setIsRendered] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
+
+  const isClosingRef = useRef(false);
+  const fallbackTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const rafRef = useRef<number | null>(null);
+
   const {
     items,
     updateQuantity,
@@ -38,28 +45,95 @@ export default function CartDrawer({
 
   const [editingCartItem, setEditingCartItem] = useState<CartItem | null>(null);
 
-  // Lock background body scroll cleanly while drawer is open
-  useBodyScrollLock(isOpen);
+  // Lock background body scroll while drawer is rendered (open or animating out)
+  useBodyScrollLock(isRendered);
 
   useEffect(() => {
     setMounted(true);
+    return () => {
+      if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
   }, []);
+
+  // Smooth dismiss handler with exit transition
+  const handleDismiss = useCallback(() => {
+    if (isClosingRef.current) return;
+    isClosingRef.current = true;
+
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+
+    setIsVisible(false);
+
+    if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
+    fallbackTimerRef.current = setTimeout(() => {
+      setIsRendered(false);
+      isClosingRef.current = false;
+      onClose();
+    }, 400);
+  }, [onClose]);
+
+  // Deterministic mount -> paint closed state -> animate open on next frame
+  useEffect(() => {
+    if (isOpen) {
+      isClosingRef.current = false;
+      if (fallbackTimerRef.current) {
+        clearTimeout(fallbackTimerRef.current);
+        fallbackTimerRef.current = null;
+      }
+      // 1. Mount in offscreen closed state
+      setIsRendered(true);
+      setIsVisible(false);
+
+      // 2. Allow browser to paint offscreen state, then transition to open
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = requestAnimationFrame(() => {
+          setIsVisible(true);
+        });
+      });
+    } else if (!isOpen && isRendered) {
+      handleDismiss();
+    }
+
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [isOpen]); // Stable dependency
+
+  const handlePanelTransitionEnd = (e: React.TransitionEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget) return;
+    if (e.propertyName !== "transform") return;
+
+    if (!isVisible && isClosingRef.current) {
+      if (fallbackTimerRef.current) {
+        clearTimeout(fallbackTimerRef.current);
+        fallbackTimerRef.current = null;
+      }
+      setIsRendered(false);
+      isClosingRef.current = false;
+      onClose();
+    }
+  };
 
   // Escape key listener
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isRendered || !isVisible) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         if (!editingCartItem) {
-          onClose();
+          handleDismiss();
         }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, editingCartItem, onClose]);
+  }, [isRendered, isVisible, editingCartItem, handleDismiss]);
 
   const itemCount = getItemCount();
   const subtotal = getSubtotal();
@@ -74,7 +148,7 @@ export default function CartDrawer({
     setEditingCartItem(null);
   };
 
-  if (!isOpen || !mounted) return null;
+  if (!isRendered || !mounted) return null;
 
   const drawerContent = (
     <>
@@ -82,16 +156,34 @@ export default function CartDrawer({
         className="fixed inset-0 z-50 overflow-hidden"
         style={{ overscrollBehavior: "contain" }}
       >
-        {/* Backdrop */}
+        {/* Backdrop with pure opacity transition (no expensive runtime filters) */}
         <div
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity"
-          onClick={onClose}
+          style={{
+            transitionProperty: "opacity",
+            transitionDuration: "220ms",
+            transitionTimingFunction: "ease-out",
+          }}
+          className={`fixed inset-0 bg-slate-900/60 transition-opacity motion-reduce:transition-none ${
+            isVisible ? "opacity-100" : "opacity-0 pointer-events-none"
+          }`}
+          onClick={handleDismiss}
           onTouchMove={(e) => e.preventDefault()}
         />
 
-        {/* Slide-out Panel */}
-        <div className="fixed inset-y-0 right-0 max-w-full flex pl-6 sm:pl-10 h-full max-h-[100dvh] h-[100dvh]">
-          <div className="w-screen max-w-md bg-white shadow-2xl flex flex-col justify-between border-l border-slate-200 h-full max-h-[100dvh] h-[100dvh] overflow-hidden">
+        {/* Slide-out Panel Container */}
+        <div className="fixed inset-y-0 right-0 max-w-full flex pl-6 sm:pl-10 h-full max-h-[100dvh] h-[100dvh] pointer-events-none">
+          <div
+            onTransitionEnd={handlePanelTransitionEnd}
+            style={{
+              overscrollBehavior: "contain",
+              transitionProperty: "transform",
+              transitionDuration: "320ms",
+              transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)",
+              transform: isVisible ? "translate3d(0, 0, 0)" : "translate3d(100%, 0, 0)",
+              willChange: "transform",
+            }}
+            className="w-screen max-w-md bg-white shadow-2xl flex flex-col justify-between border-l border-slate-200 h-full max-h-[100dvh] h-[100dvh] overflow-hidden pointer-events-auto motion-reduce:transition-none"
+          >
             {/* Drawer Header (Fixed at top) */}
             <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-orange-50/30 shrink-0">
               <div className="flex items-center gap-2">
@@ -105,6 +197,7 @@ export default function CartDrawer({
               <div className="flex items-center gap-2">
                 {items.length > 0 && (
                   <button
+                    type="button"
                     onClick={clearCart}
                     className="text-xs font-medium text-slate-400 hover:text-red-600 transition-colors mr-2 cursor-pointer"
                   >
@@ -112,7 +205,8 @@ export default function CartDrawer({
                   </button>
                 )}
                 <button
-                  onClick={onClose}
+                  type="button"
+                  onClick={handleDismiss}
                   className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
                   aria-label="Close cart"
                 >
@@ -211,6 +305,7 @@ export default function CartDrawer({
                       <div className="mt-3 pt-2.5 border-t border-slate-200 flex items-center justify-between">
                         <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-0.5">
                           <button
+                            type="button"
                             onClick={() => updateQuantity(item.id, quantity - 1)}
                             className="p-1.5 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
                             aria-label="Decrease quantity"
@@ -221,6 +316,7 @@ export default function CartDrawer({
                             {quantity}
                           </span>
                           <button
+                            type="button"
                             onClick={() => updateQuantity(item.id, quantity + 1)}
                             disabled={!isAvailable}
                             className="p-1.5 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors disabled:opacity-30 cursor-pointer"
@@ -233,6 +329,7 @@ export default function CartDrawer({
                         <div className="flex items-center gap-2">
                           {product.modifierGroups && product.modifierGroups.length > 0 && (
                             <button
+                              type="button"
                               onClick={() => setEditingCartItem(item)}
                               className="text-xs font-medium text-slate-500 hover:text-primary flex items-center gap-1 p-1 transition-colors cursor-pointer"
                             >
@@ -242,6 +339,7 @@ export default function CartDrawer({
                           )}
 
                           <button
+                            type="button"
                             onClick={() => removeItem(item.id)}
                             className="text-xs font-medium text-slate-400 hover:text-red-600 flex items-center gap-1 p-1 transition-colors cursor-pointer"
                           >
@@ -279,7 +377,7 @@ export default function CartDrawer({
                 <Link
                   href={!isRestaurantOpen || hasUnavailable ? "#" : "/checkout"}
                   onClick={() => {
-                    if (isRestaurantOpen && !hasUnavailable) onClose();
+                    if (isRestaurantOpen && !hasUnavailable) handleDismiss();
                   }}
                   className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-semibold shadow-xs transition-all text-white ${
                     !isRestaurantOpen || hasUnavailable
