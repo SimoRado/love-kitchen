@@ -44,10 +44,7 @@ export default function CartDrawer({
     quantity: number
   ) => {
     if (!editingCartItem) return;
-    updateItemConfiguration(editingCartItem.id, selectedModifiers);
-    if (quantity !== editingCartItem.quantity) {
-      updateQuantity(editingCartItem.id, quantity);
-    }
+    updateItemConfiguration(editingCartItem.id, selectedModifiers, quantity);
     setEditingCartItem(null);
   };
 
@@ -273,6 +270,7 @@ export default function CartDrawer({
           product={editingCartItem.product}
           currency={currency}
           initialSelections={editingCartItem.selectedModifiers}
+          initialQuantity={editingCartItem.quantity}
           isEditing={true}
           onClose={() => setEditingCartItem(null)}
           onConfirm={handleConfirmEdit}

@@ -91,6 +91,7 @@ export interface Order {
   subtotal: number;
   deliveryFee: number;
   total: number;
+  allergies?: string | null;
   notes: string | null;
   items: OrderItem[];
   createdAt: string | Date;

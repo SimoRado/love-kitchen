@@ -71,6 +71,7 @@ model Order {
   subtotal        Float
   deliveryFee     Float       @default(0)
   total           Float
+  allergies       String?
   notes           String?
   items           OrderItem[]
   createdAt       DateTime    @default(now())

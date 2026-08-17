@@ -24,7 +24,11 @@ export async function GET(
     const order = await prisma.order.findUnique({
       where: { id },
       include: {
-        items: true,
+        items: {
+          include: {
+            modifiers: true,
+          },
+        },
       },
     });
 
@@ -84,7 +88,11 @@ export async function PATCH(
         status: status.toUpperCase(),
       },
       include: {
-        items: true,
+        items: {
+          include: {
+            modifiers: true,
+          },
+        },
       },
     });
 

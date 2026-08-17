@@ -23,7 +23,7 @@ async function main() {
       name: "Love Kitchen",
       subtitle: "Artisanal Kitchen & Delivery",
       phone: "+212 522 123456",
-      address: "72 Boulevard Massira Khadra, Casablanca",
+      address: "N° 6, quartier les princesses, Résidence Miradore A, Rue Al Jounaid Arsat Lakbir, Casablanca",
       currency: "MAD",
       deliveryFee: 15,
       isOpenOverride: null, // Follow schedule

@@ -227,6 +227,11 @@ export default function DashboardPage() {
                         <div className="text-[11px] text-text-muted font-normal">
                           {order.customerPhone}
                         </div>
+                        {order.allergies && order.allergies.trim() && (
+                          <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-50 border border-red-200 text-red-700 text-[10px] font-bold uppercase tracking-tight">
+                            <span>ALLERGIES: {order.allergies.trim()}</span>
+                          </div>
+                        )}
                       </td>
 
                       {/* Order Type */}

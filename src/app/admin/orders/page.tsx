@@ -107,7 +107,10 @@ export default function OrdersPage() {
         const matchesItem = order.items.some((it) =>
           it.productName.toLowerCase().includes(q)
         );
-        if (!matchesNum && !matchesName && !matchesPhone && !matchesItem) {
+        const matchesAllergies = Boolean(
+          order.allergies && order.allergies.toLowerCase().includes(q)
+        );
+        if (!matchesNum && !matchesName && !matchesPhone && !matchesItem && !matchesAllergies) {
           return false;
         }
       }
@@ -317,6 +320,11 @@ export default function OrdersPage() {
                         <div className="text-[11px] text-text-muted">
                           {order.customerPhone}
                         </div>
+                        {order.allergies && order.allergies.trim() && (
+                          <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-50 border border-red-200 text-red-700 text-[10px] font-bold uppercase tracking-tight">
+                            <span>ALLERGIES: {order.allergies.trim()}</span>
+                          </div>
+                        )}
                       </td>
 
                       {/* Type */}
@@ -333,6 +341,11 @@ export default function OrdersPage() {
                         <p className="truncate text-text-main font-medium">
                           {itemsSummary}
                         </p>
+                        {order.allergies && order.allergies.trim() && (
+                          <p className="text-[11px] text-red-700 font-bold uppercase truncate mt-0.5">
+                            Allergies: {order.allergies.trim()}
+                          </p>
+                        )}
                         {order.notes && (
                           <p className="text-[11px] text-amber-700 font-medium truncate mt-0.5">
                             Note: {order.notes}

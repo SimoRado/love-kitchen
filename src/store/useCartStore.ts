@@ -7,6 +7,7 @@ interface CustomerInfo {
   customerName: string;
   customerPhone: string;
   customerAddress: string;
+  allergies?: string;
   notes: string;
 }
 
@@ -25,7 +26,8 @@ interface CartState {
   updateQuantity: (itemId: string, quantity: number) => void;
   updateItemConfiguration: (
     itemId: string,
-    newSelectedModifiers: SelectedModifierOptionSnapshot[]
+    newSelectedModifiers: SelectedModifierOptionSnapshot[],
+    newQuantity?: number
   ) => void;
   setOrderType: (orderType: OrderType) => void;
   setCustomerInfo: (info: Partial<CustomerInfo>) => void;
@@ -72,6 +74,7 @@ export const useCartStore = create<CartState>()(
         customerName: "",
         customerPhone: "",
         customerAddress: "",
+        allergies: "",
         notes: "",
       },
 
@@ -83,7 +86,7 @@ export const useCartStore = create<CartState>()(
         );
         const itemId = generateCartItemId(product.id, sortedModifiers);
         const configuredUnitPrice = calculateConfiguredPrice(product.price, sortedModifiers);
-        const validQuantity = Math.max(1, Math.floor(quantity) || 1);
+        const validQuantity = Math.max(1, Math.floor(Number(quantity)) || 1);
 
         const currentItems = get().items;
         const existingIndex = currentItems.findIndex((item) => item.id === itemId);
@@ -121,20 +124,25 @@ export const useCartStore = create<CartState>()(
       },
 
       updateQuantity: (itemId: string, quantity: number) => {
-        if (quantity <= 0) {
+        const safeQty = Math.floor(Number(quantity)) || 0;
+        if (safeQty <= 0) {
           get().removeItem(itemId);
           return;
         }
 
         const updatedItems = get().items.map((item) =>
           item.id === itemId
-            ? { ...item, quantity: Math.floor(quantity) }
+            ? { ...item, quantity: safeQty }
             : item
         );
         set({ items: updatedItems });
       },
 
-      updateItemConfiguration: (itemId: string, newSelectedModifiers: SelectedModifierOptionSnapshot[]) => {
+      updateItemConfiguration: (
+        itemId: string,
+        newSelectedModifiers: SelectedModifierOptionSnapshot[],
+        newQuantity?: number
+      ) => {
         const currentItems = get().items;
         const itemToUpdate = currentItems.find((it) => it.id === itemId);
         if (!itemToUpdate) return;
@@ -144,6 +152,10 @@ export const useCartStore = create<CartState>()(
         );
         const newId = generateCartItemId(itemToUpdate.product.id, sortedModifiers);
         const newUnitPrice = calculateConfiguredPrice(itemToUpdate.product.price, sortedModifiers);
+        const targetQuantity =
+          newQuantity !== undefined
+            ? Math.max(1, Math.floor(Number(newQuantity)) || 1)
+            : Math.max(1, Math.floor(Number(itemToUpdate.quantity)) || 1);
 
         // If new configuration is identical to another existing line
         const existingTargetIndex = currentItems.findIndex(
@@ -154,11 +166,11 @@ export const useCartStore = create<CartState>()(
           // Merge into target line and remove old line
           const merged = currentItems
             .filter((it) => it.id !== itemId)
-            .map((it, idx) =>
-              idx === existingTargetIndex || it.id === newId
+            .map((it) =>
+              it.id === newId
                 ? {
                     ...it,
-                    quantity: it.quantity + itemToUpdate.quantity,
+                    quantity: it.quantity + targetQuantity,
                     configuredUnitPrice: newUnitPrice,
                     selectedModifiers: sortedModifiers,
                   }
@@ -171,6 +183,7 @@ export const useCartStore = create<CartState>()(
               ? {
                   ...it,
                   id: newId,
+                  quantity: targetQuantity,
                   selectedModifiers: sortedModifiers,
                   configuredUnitPrice: newUnitPrice,
                 }

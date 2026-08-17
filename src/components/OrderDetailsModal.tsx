@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   X,
   User,
@@ -10,6 +10,7 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   Loader2,
   ChevronRight,
   Truck,
@@ -50,6 +51,41 @@ export default function OrderDetailsModal({
   const { showToast } = useToast();
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
+  // Lock body scroll while modal is open
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const prevOverflow = document.body.style.overflow;
+    const prevPaddingRight = document.body.style.paddingRight;
+
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+    }
+    document.body.style.overflow = "hidden";
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        const activeEl = document.activeElement;
+        const isTyping =
+          activeEl instanceof HTMLInputElement ||
+          activeEl instanceof HTMLTextAreaElement ||
+          activeEl?.getAttribute("contenteditable") === "true";
+        if (!isTyping) {
+          onClose();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.body.style.paddingRight = prevPaddingRight;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
   if (!isOpen || !order) return null;
 
   const currentStatusIndex = STATUS_FLOW.indexOf(order.status as OrderStatus);
@@ -87,15 +123,23 @@ export default function OrderDetailsModal({
   const orderTypeBadge = getOrderTypeConfig(order.orderType);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-hidden"
+      style={{ overscrollBehavior: "contain" }}
+    >
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity"
         onClick={onClose}
+        onTouchMove={(e) => e.preventDefault()}
       />
 
       {/* Modal Dialog */}
-      <div className="relative bg-surface rounded-2xl border border-border shadow-2xl max-w-2xl w-full my-8 z-10 overflow-hidden flex flex-col max-h-[90vh]">
+      <div
+        className="relative bg-surface rounded-2xl border border-border shadow-2xl max-w-2xl w-full my-8 z-10 overflow-hidden flex flex-col max-h-[90vh]"
+        style={{ overscrollBehavior: "contain" }}
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="px-6 py-4 border-b border-border flex items-center justify-between bg-surface-subtle/50">
           <div className="flex items-center gap-3">
@@ -233,15 +277,30 @@ export default function OrderDetailsModal({
             </div>
           </div>
 
+          {/* Allergies Warning in RED if non-empty */}
+          {order.allergies && order.allergies.trim() && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3.5 flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+              <div className="text-xs">
+                <span className="font-bold text-red-700 uppercase tracking-wider block mb-0.5">
+                  ALLERGIES:
+                </span>
+                <p className="text-red-700 font-semibold uppercase leading-relaxed">
+                  {order.allergies.trim()}
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Notes if present */}
-          {order.notes && (
+          {order.notes && order.notes.trim() && (
             <div className="bg-amber-50/60 border border-amber-200 rounded-xl p-3.5 flex items-start gap-2.5">
               <FileText className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
               <div className="text-xs">
                 <span className="font-bold text-amber-900 block mb-0.5">
                   Customer Notes:
                 </span>
-                <p className="text-amber-800 leading-relaxed">{order.notes}</p>
+                <p className="text-amber-800 leading-relaxed">{order.notes.trim()}</p>
               </div>
             </div>
           )}
@@ -287,22 +346,27 @@ export default function OrderDetailsModal({
 
                           {/* Modifiers snapshot breakdown */}
                           {item.modifiers && item.modifiers.length > 0 && (
-                            <div className="mt-1.5 space-y-1 text-[11px] text-text-muted bg-surface-subtle p-2 rounded-lg border border-border/60">
+                            <div className="mt-2 space-y-1.5 text-xs bg-surface-subtle p-2.5 rounded-lg border border-border/60">
                               {Object.entries(groupedMods).map(([groupName, mods]) => (
-                                <div key={groupName} className="flex items-baseline gap-1.5 leading-snug">
-                                  <span className="font-semibold text-text-main">{groupName}:</span>
-                                  <span className="text-text-muted font-normal">
-                                    {mods
-                                      .map(
-                                        (m) =>
-                                          `${m.name}${
-                                            m.delta > 0
-                                              ? ` (+${formatCurrency(m.delta, currency)})`
-                                              : ""
-                                          }`
-                                      )
-                                      .join(", ")}
-                                  </span>
+                                <div key={groupName} className="space-y-0.5 leading-snug">
+                                  <div className="font-semibold text-text-main text-[11px] uppercase tracking-wide">
+                                    {groupName}
+                                  </div>
+                                  <ul className="pl-1 space-y-0.5 text-text-muted text-xs">
+                                    {mods.map((m, idx) => (
+                                      <li key={idx} className="flex items-center gap-1.5">
+                                        <span className="text-primary font-bold">•</span>
+                                        <span>
+                                          {m.name}
+                                          {m.delta > 0 && (
+                                            <span className="text-text-main font-medium ml-1">
+                                              +{formatCurrency(m.delta, currency)}
+                                            </span>
+                                          )}
+                                        </span>
+                                      </li>
+                                    ))}
+                                  </ul>
                                 </div>
                               ))}
                             </div>

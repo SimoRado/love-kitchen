@@ -5,6 +5,7 @@ import { Clock, Phone, MapPin, AlertCircle, Bike } from "lucide-react";
 import { RestaurantSettings } from "@/lib/types";
 import { RestaurantOpenStatus } from "@/lib/openingHoursHelper";
 import { formatCurrency } from "@/lib/formatters";
+import { RESTAURANT_ADDRESS, RESTAURANT_MAPS_URL } from "@/lib/constants";
 
 interface StoreStatusBannerProps {
   settings: RestaurantSettings | null;
@@ -94,18 +95,26 @@ export default function StoreStatusBanner({
             </div>
           </div>
 
-          {/* 4. Address */}
-          <div className="flex items-center gap-3.5 pt-3 sm:pt-0 sm:pl-6">
-            <div className="w-10 h-10 rounded-xl bg-slate-50 text-slate-600 border border-slate-200 flex items-center justify-center shrink-0">
+          {/* 4. Address (Clickable Google Maps Link) */}
+          <a
+            href={RESTAURANT_MAPS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3.5 pt-3 sm:pt-0 sm:pl-6 group hover:opacity-95 transition-opacity cursor-pointer"
+            title="Open restaurant location in Google Maps"
+          >
+            <div className="w-10 h-10 rounded-xl bg-slate-50 text-slate-600 border border-slate-200 group-hover:border-primary/50 group-hover:text-primary group-hover:bg-orange-50/50 flex items-center justify-center shrink-0 transition-colors">
               <MapPin className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-semibold text-slate-800">Restaurant Location</p>
+              <p className="text-xs font-semibold text-slate-800 group-hover:text-primary transition-colors">
+                Restaurant Location
+              </p>
               <p className="text-xs text-slate-500 font-normal line-clamp-1 mt-0.5">
-                {settings.address}
+                {RESTAURANT_ADDRESS}
               </p>
             </div>
-          </div>
+          </a>
         </div>
       </div>
     </div>

@@ -62,6 +62,7 @@ export async function POST(request: NextRequest) {
       customerPhone,
       customerAddress,
       orderType = "DELIVERY",
+      allergies,
       notes,
       items,
     } = body;
@@ -268,21 +269,15 @@ export async function POST(request: NextRequest) {
       for (const group of dbProduct.modifierGroups) {
         const count = groupSelectionsCount.get(group.id) || 0;
 
-        if (group.required && count < group.minSelections) {
-          return NextResponse.json(
-            {
-              success: false,
-              error: `Please select at least ${group.minSelections} option(s) for "${group.name}" on "${dbProduct.name}".`,
-            },
-            { status: 400 }
-          );
-        }
+        const effectiveMin = group.required
+          ? Math.max(1, group.minSelections ?? 0)
+          : (group.minSelections ?? 0);
 
-        if (!group.required && group.minSelections > 0 && count > 0 && count < group.minSelections) {
+        if (effectiveMin > 0 && count < effectiveMin) {
           return NextResponse.json(
             {
               success: false,
-              error: `Please select at least ${group.minSelections} option(s) for "${group.name}" on "${dbProduct.name}".`,
+              error: `Please select at least ${effectiveMin} option(s) for "${group.name}" on "${dbProduct.name}".`,
             },
             { status: 400 }
           );
@@ -346,6 +341,7 @@ export async function POST(request: NextRequest) {
         subtotal,
         deliveryFee,
         total,
+        allergies: allergies && typeof allergies === "string" && allergies.trim() ? allergies.trim() : null,
         notes: notes && typeof notes === "string" ? notes.trim() : null,
         items: {
           create: validatedItemsToCreate,

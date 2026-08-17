@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ShoppingBag } from "lucide-react";
 import { useCartStore } from "@/store/useCartStore";
 import { RestaurantOpenStatus } from "@/lib/openingHoursHelper";
+import { RESTAURANT_MAPS_URL } from "@/lib/constants";
 
 interface StoreNavbarProps {
   restaurantName?: string;
@@ -53,7 +54,7 @@ export default function StoreNavbar({
           <span className="text-slate-500 font-normal">{openStatus.statusDetail}</span>
         </div>
 
-        {/* Right: Menu Link & Cart Trigger */}
+        {/* Right: Menu Link, Location Link & Cart Trigger */}
         <div className="flex items-center gap-3 sm:gap-4">
           <a
             href="#menu"
@@ -63,10 +64,12 @@ export default function StoreNavbar({
           </a>
 
           <a
-            href="#restaurant-info"
+            href={RESTAURANT_MAPS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
             className="hidden sm:inline-flex text-xs font-medium uppercase tracking-wider text-slate-600 hover:text-primary transition-colors py-2 px-3"
           >
-            Hours & Location
+            Location
           </a>
 
           {/* Cart Button */}

@@ -23,12 +23,7 @@ export default function StoreHero({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 lg:py-20">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
           {/* Left Text Column */}
-          <div className="lg:col-span-7 space-y-6 text-center lg:text-left">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-100/80 border border-orange-200 text-orange-900 text-xs font-semibold">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-              <span>Gourmet Kitchen • Fresh Daily</span>
-            </div>
-
+          <div className="lg:col-span-7 space-y-5 sm:space-y-6 text-center lg:text-left">
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 tracking-tight leading-[1.15] font-serif">
               Fresh food, made with love & crafted for you.
             </h1>

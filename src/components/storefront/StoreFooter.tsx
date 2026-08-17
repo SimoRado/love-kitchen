@@ -3,6 +3,7 @@
 import React from "react";
 import { Clock, Phone, MapPin, Heart } from "lucide-react";
 import { RestaurantSettings } from "@/lib/types";
+import { RESTAURANT_ADDRESS, RESTAURANT_MAPS_URL } from "@/lib/constants";
 
 interface StoreFooterProps {
   settings: RestaurantSettings | null;
@@ -54,9 +55,14 @@ export default function StoreFooter({ settings }: StoreFooterProps) {
               <span>Visit & Contact</span>
             </h4>
             <div className="space-y-2 text-xs text-slate-400">
-              <p className="leading-relaxed text-slate-300">
-                {settings?.address || "Casablanca, Morocco"}
-              </p>
+              <a
+                href={RESTAURANT_MAPS_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="leading-relaxed text-slate-300 hover:text-primary transition-colors block"
+              >
+                {RESTAURANT_ADDRESS}
+              </a>
               {settings?.phone && (
                 <p className="flex items-center gap-2 text-slate-300 font-semibold pt-1">
                   <Phone className="w-3.5 h-3.5 text-primary" />

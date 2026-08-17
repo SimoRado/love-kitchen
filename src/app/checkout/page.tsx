@@ -45,6 +45,7 @@ export default function CheckoutPage() {
   const [name, setName] = useState(customerInfo.customerName || "");
   const [phone, setPhone] = useState(customerInfo.customerPhone || "");
   const [address, setAddress] = useState(customerInfo.customerAddress || "");
+  const [allergies, setAllergies] = useState(customerInfo.allergies || "");
   const [notes, setNotes] = useState(customerInfo.notes || "");
   const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
 
@@ -141,6 +142,7 @@ export default function CheckoutPage() {
         customerName: name.trim(),
         customerPhone: phone.trim(),
         customerAddress: address.trim(),
+        allergies: allergies.trim(),
         notes: notes.trim(),
       });
 
@@ -149,6 +151,7 @@ export default function CheckoutPage() {
         customerPhone: phone.trim(),
         customerAddress: orderType === "DELIVERY" ? address.trim() : null,
         orderType,
+        allergies: allergies.trim() || null,
         notes: notes.trim() || null,
         items: items.map((it) => ({
           productId: it.product.id,
@@ -439,6 +442,23 @@ export default function CheckoutPage() {
                     )}
                   </div>
                 )}
+
+                {/* Allergies */}
+                <div>
+                  <label className="block text-xs font-medium uppercase tracking-wider text-slate-600 mb-1.5">
+                    Allergies (Optional)
+                  </label>
+                  <div className="relative">
+                    <AlertCircle className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                    <textarea
+                      rows={2}
+                      value={allergies}
+                      onChange={(e) => setAllergies(e.target.value)}
+                      placeholder="e.g. peanuts, dairy, shellfish..."
+                      className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#E8DFD1] text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors resize-none"
+                    />
+                  </div>
+                </div>
 
                 {/* Order Notes */}
                 <div>
