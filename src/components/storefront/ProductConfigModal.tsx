@@ -46,6 +46,7 @@ export default function ProductConfigModal({
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const isClosingRef = useRef(false);
+  const isRenderedRef = useRef(false);
   const fallbackTimerRef = useRef<NodeJS.Timeout | null>(null);
   const rafRef = useRef<number | null>(null);
   const onCloseRef = useRef(onClose);
@@ -100,9 +101,25 @@ export default function ProductConfigModal({
     }
   }, [isOpen, product, currentInitKey, initialSelections, initialQuantity]);
 
+  const finishDismiss = useCallback(() => {
+    if (!isClosingRef.current) return;
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    if (fallbackTimerRef.current) {
+      clearTimeout(fallbackTimerRef.current);
+      fallbackTimerRef.current = null;
+    }
+    isRenderedRef.current = false;
+    isClosingRef.current = false;
+    setIsRendered(false);
+    onCloseRef.current();
+  }, []);
+
   // Smooth dismiss handler with exit transition
   const handleDismiss = useCallback(() => {
-    if (isClosingRef.current) return;
+    if (isClosingRef.current || !isRenderedRef.current) return;
     isClosingRef.current = true;
 
     if (rafRef.current) {
@@ -113,55 +130,59 @@ export default function ProductConfigModal({
     setIsVisible(false);
 
     if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
-    fallbackTimerRef.current = setTimeout(() => {
-      setIsRendered(false);
-      isClosingRef.current = false;
-      onCloseRef.current();
-    }, 380);
-  }, []);
+    fallbackTimerRef.current = setTimeout(finishDismiss, 380);
+  }, [finishDismiss]);
 
-  // Deterministic mount -> paint closed state -> animate open on next frame
+  // Mount in the closed position. Visibility is scheduled only after this commit.
   const productId = product?.id;
   useEffect(() => {
     if (isOpen && productId) {
-      isClosingRef.current = false;
+      if (isRenderedRef.current || isClosingRef.current) return;
       if (fallbackTimerRef.current) {
         clearTimeout(fallbackTimerRef.current);
         fallbackTimerRef.current = null;
       }
-      // 1. Mount in closed initial state
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- prop-driven mount starts the preserved entrance animation
-      setIsRendered(true);
+      isRenderedRef.current = true;
+      isClosingRef.current = false;
       setIsVisible(false);
-
-      // 2. Allow browser to paint initial state, then transition to open
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      rafRef.current = requestAnimationFrame(() => {
-        rafRef.current = requestAnimationFrame(() => {
-          setIsVisible(true);
-        });
-      });
-    } else if (!isOpen && isRendered) {
+      setIsRendered(true);
+    } else if (!isOpen && isRenderedRef.current) {
       handleDismiss();
     }
+  }, [isOpen, productId, handleDismiss]);
+
+  // The panel now exists offscreen in the DOM. Two frames guarantee that state paints
+  // before the mobile transform transitions to its visible position.
+  useEffect(() => {
+    if (!isRendered || !isOpen || !productId || isClosingRef.current) return;
+
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        if (isRenderedRef.current && !isClosingRef.current) {
+          setIsVisible(true);
+        }
+      });
+    });
 
     return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
     };
-  }, [isOpen, productId, isRendered, handleDismiss]);
+  }, [isRendered, isOpen, productId]);
 
   const handlePanelTransitionEnd = (e: React.TransitionEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return;
-    if (e.propertyName !== "transform" && e.propertyName !== "opacity") return;
+    const isDesktopOpacityTransition =
+      e.propertyName === "opacity" &&
+      window.matchMedia("(min-width: 640px)").matches;
+    if (e.propertyName !== "transform" && !isDesktopOpacityTransition) return;
 
     if (!isVisible && isClosingRef.current) {
-      if (fallbackTimerRef.current) {
-        clearTimeout(fallbackTimerRef.current);
-        fallbackTimerRef.current = null;
-      }
-      setIsRendered(false);
-      isClosingRef.current = false;
-      onCloseRef.current();
+      finishDismiss();
     }
   };
 
@@ -309,6 +330,7 @@ export default function ProductConfigModal({
           transitionProperty: "opacity",
           transitionDuration: "220ms",
           transitionTimingFunction: "ease-out",
+          willChange: "opacity",
         }}
         className={`fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity motion-reduce:transition-none ${
           isVisible ? "opacity-100" : "opacity-0 pointer-events-none"
@@ -328,8 +350,9 @@ export default function ProductConfigModal({
           style={{
             overscrollBehavior: "contain",
             backfaceVisibility: "hidden",
+            willChange: "transform, opacity",
           }}
-          className={`relative bg-white rounded-t-3xl sm:rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full max-h-[90dvh] sm:max-h-[85vh] flex flex-col z-10 overflow-hidden pointer-events-auto motion-reduce:transition-none ${
+          className={`relative transform-gpu bg-white rounded-t-3xl sm:rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full max-h-[90dvh] sm:max-h-[85vh] flex flex-col z-10 overflow-hidden pointer-events-auto motion-reduce:transition-none ${
             isVisible
               ? "translate-y-0 opacity-100 sm:translate-y-0 sm:opacity-100 transition-transform duration-[320ms] ease-[cubic-bezier(0.16,1,0.3,1)] sm:transition-opacity sm:duration-[220ms] sm:ease-out"
               : "translate-y-full opacity-100 sm:translate-y-0 sm:opacity-0 pointer-events-none transition-transform duration-[320ms] ease-[cubic-bezier(0.16,1,0.3,1)] sm:transition-opacity sm:duration-[220ms] sm:ease-out"

@@ -28,6 +28,7 @@ export default function CartDrawer({
   const [isVisible, setIsVisible] = useState(false);
 
   const isClosingRef = useRef(false);
+  const isRenderedRef = useRef(false);
   const fallbackTimerRef = useRef<NodeJS.Timeout | null>(null);
   const rafRef = useRef<number | null>(null);
   const onCloseRef = useRef(onClose);
@@ -59,9 +60,25 @@ export default function CartDrawer({
     };
   }, []);
 
+  const finishDismiss = useCallback(() => {
+    if (!isClosingRef.current) return;
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    if (fallbackTimerRef.current) {
+      clearTimeout(fallbackTimerRef.current);
+      fallbackTimerRef.current = null;
+    }
+    isRenderedRef.current = false;
+    isClosingRef.current = false;
+    setIsRendered(false);
+    onCloseRef.current();
+  }, []);
+
   // Smooth dismiss handler with exit transition
   const handleDismiss = useCallback(() => {
-    if (isClosingRef.current) return;
+    if (isClosingRef.current || !isRenderedRef.current) return;
     isClosingRef.current = true;
 
     if (rafRef.current) {
@@ -72,54 +89,55 @@ export default function CartDrawer({
     setIsVisible(false);
 
     if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
-    fallbackTimerRef.current = setTimeout(() => {
-      setIsRendered(false);
-      isClosingRef.current = false;
-      onCloseRef.current();
-    }, 400);
-  }, []);
+    fallbackTimerRef.current = setTimeout(finishDismiss, 400);
+  }, [finishDismiss]);
 
-  // Deterministic mount -> paint closed state -> animate open on next frame
+  // Mount in the closed position. Visibility is scheduled only after this commit.
   useEffect(() => {
     if (isOpen) {
-      isClosingRef.current = false;
+      if (isRenderedRef.current || isClosingRef.current) return;
       if (fallbackTimerRef.current) {
         clearTimeout(fallbackTimerRef.current);
         fallbackTimerRef.current = null;
       }
-      // 1. Mount in offscreen closed state
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- prop-driven mount starts the preserved entrance animation
-      setIsRendered(true);
+      isRenderedRef.current = true;
+      isClosingRef.current = false;
       setIsVisible(false);
-
-      // 2. Allow browser to paint offscreen state, then transition to open
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      rafRef.current = requestAnimationFrame(() => {
-        rafRef.current = requestAnimationFrame(() => {
-          setIsVisible(true);
-        });
-      });
-    } else if (!isOpen && isRendered) {
+      setIsRendered(true);
+    } else if (!isOpen && isRenderedRef.current) {
       handleDismiss();
     }
+  }, [isOpen, handleDismiss]);
+
+  // The drawer now exists offscreen in the DOM. Two frames guarantee that state
+  // paints before the transform transitions to its visible position.
+  useEffect(() => {
+    if (!isRendered || !isOpen || isClosingRef.current) return;
+
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        if (isRenderedRef.current && !isClosingRef.current) {
+          setIsVisible(true);
+        }
+      });
+    });
 
     return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
     };
-  }, [isOpen, isRendered, handleDismiss]);
+  }, [isRendered, isOpen]);
 
   const handlePanelTransitionEnd = (e: React.TransitionEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return;
     if (e.propertyName !== "transform") return;
 
     if (!isVisible && isClosingRef.current) {
-      if (fallbackTimerRef.current) {
-        clearTimeout(fallbackTimerRef.current);
-        fallbackTimerRef.current = null;
-      }
-      setIsRendered(false);
-      isClosingRef.current = false;
-      onCloseRef.current();
+      finishDismiss();
     }
   };
 
@@ -166,6 +184,7 @@ export default function CartDrawer({
             transitionProperty: "opacity",
             transitionDuration: "220ms",
             transitionTimingFunction: "ease-out",
+            willChange: "opacity",
           }}
           className={`fixed inset-0 bg-slate-900/60 transition-opacity motion-reduce:transition-none ${
             isVisible ? "opacity-100" : "opacity-0 pointer-events-none"

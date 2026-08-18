@@ -39,7 +39,7 @@ export default function StoreStatusBanner({
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 sm:divide-x sm:divide-slate-100">
           {/* 1. Open Status */}
           <div className="flex items-center gap-3.5 pt-2 sm:pt-0">
             <div
