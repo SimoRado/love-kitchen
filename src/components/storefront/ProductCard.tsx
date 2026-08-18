@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Plus, Check, UtensilsCrossed, Sparkles } from "lucide-react";
+import { Plus, Check, UtensilsCrossed } from "lucide-react";
 import { Product, SelectedModifierOptionSnapshot } from "@/lib/types";
 import { formatCurrency } from "@/lib/formatters";
 import { useCartStore } from "@/store/useCartStore";
@@ -102,11 +102,6 @@ export default function ProductCard({
                 <div className="bg-slate-900/80 text-white text-[10px] sm:text-[11px] font-medium px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-md backdrop-blur-xs shadow-xs">
                   Unavailable
                 </div>
-              ) : productHasModifiers ? (
-                <div className="bg-orange-600/90 text-white text-[9px] sm:text-[10px] font-semibold px-2 py-0.5 rounded-md backdrop-blur-xs shadow-xs flex items-center gap-1">
-                  <Sparkles className="w-2.5 h-2.5" />
-                  <span>Customizable</span>
-                </div>
               ) : null}
             </div>
           </div>
@@ -143,11 +138,6 @@ export default function ProductCard({
             <span className="text-xs sm:text-base font-semibold text-slate-900 tracking-tight whitespace-nowrap">
               {formatCurrency(product.price, currency)}
             </span>
-            {productHasModifiers && (
-              <span className="text-[10px] text-slate-400 font-normal">
-                Base price
-              </span>
-            )}
           </div>
 
           {/* Add to Cart Button */}
@@ -174,15 +164,10 @@ export default function ProductCard({
                 <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                 <span>Added</span>
               </>
-            ) : productHasModifiers ? (
-              <>
-                <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                <span>Customize</span>
-              </>
             ) : (
               <>
                 <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                <span>Add<span className="hidden sm:inline"> to Cart</span></span>
+                <span>Add to Cart</span>
               </>
             )}
           </button>
