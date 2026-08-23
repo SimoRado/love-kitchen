@@ -78,6 +78,41 @@ model Order {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 }
+model Device {
+  id             String   @id @default(cuid())
+  publicId       String   @unique
+  name           String
+  type           String   @default("POS") // POS | KITCHEN | ADMIN
+  status         String   @default("ACTIVE") // ACTIVE | INACTIVE | REVOKED
+  restaurantId   String   @default("default")
+  credentialHash String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  lastSeenAt     DateTime?
+  revokedAt      DateTime?
+
+  registrationCodes DeviceRegistrationCode[]
+
+  @@index([restaurantId, type, status])
+  @@index([status])
+}
+
+model DeviceRegistrationCode {
+  id              String   @id @default(cuid())
+  codeHash        String   @unique
+  deviceName      String
+  deviceType      String   @default("POS")
+  restaurantId    String   @default("default")
+  replaceDeviceId String?
+  expiresAt       DateTime
+  usedAt          DateTime?
+  createdAt       DateTime @default(now())
+
+  replaceDevice Device? @relation(fields: [replaceDeviceId], references: [id], onDelete: SetNull)
+
+  @@index([expiresAt])
+  @@index([replaceDeviceId])
+}
 
 model OrderItem {
   id                  String              @id @default(cuid())
@@ -107,7 +142,7 @@ model RestaurantSettings {
   name           String        @default("Dark Kitchen")
   subtitle       String?       @default("Artisanal Kitchen & Delivery")
   phone          String        @default("+212 522 123456")
-  address        String        @default("N° 6, quartier les princesses, Résidence Miradore A, Rue Al Jounaid Arsat Lakbir, Casablanca")
+  address        String        @default("NÂ° 6, quartier les princesses, RÃ©sidence Miradore A, Rue Al Jounaid Arsat Lakbir, Casablanca")
   googleMapsUrl  String?
   whatsappNumber String?
   currency       String        @default("MAD")

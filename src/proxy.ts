@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import {
   ADMIN_COOKIE_NAME,
@@ -9,6 +9,10 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const token = request.cookies.get(ADMIN_COOKIE_NAME)?.value;
   const isAuthenticated = await verifyAdminSessionToken(token);
+
+  if (pathname === "/admin/pos" || pathname.startsWith("/admin/pos/")) {
+    return NextResponse.next();
+  }
 
   if (pathname === "/admin/login") {
     return isAuthenticated

@@ -12,6 +12,8 @@ import {
   X,
   Store,
   ChevronRight,
+  MonitorCog,
+  TabletSmartphone,
 } from "lucide-react";
 
 interface AdminSidebarProps {
@@ -42,6 +44,18 @@ const navItems = [
     name: "Categories",
     href: "/admin/categories",
     icon: Tags,
+    exact: false,
+  },
+  {
+    name: "POS Register",
+    href: "/admin/pos",
+    icon: MonitorCog,
+    exact: false,
+  },
+  {
+    name: "Devices / POS",
+    href: "/admin/devices",
+    icon: TabletSmartphone,
     exact: false,
   },
   {

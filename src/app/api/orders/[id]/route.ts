@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdminAuth } from "@/lib/auth";
+import { publishOrderEvent } from "@/lib/orderEvents";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -99,6 +100,8 @@ export async function PATCH(
         },
       },
     });
+
+    publishOrderEvent({ type: "order-updated", order: updatedOrder });
 
     return NextResponse.json({
       success: true,

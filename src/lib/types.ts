@@ -159,3 +159,27 @@ export interface ApiResponse<T = unknown> {
   error?: string;
   message?: string;
 }
+
+export type DeviceType = "POS" | "KITCHEN" | "ADMIN";
+export type DeviceStatus = "ACTIVE" | "INACTIVE" | "REVOKED";
+
+export interface Device {
+  id: string;
+  publicId: string;
+  name: string;
+  type: DeviceType;
+  status: DeviceStatus;
+  restaurantId: string;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+  lastSeenAt?: string | Date | null;
+  revokedAt?: string | Date | null;
+}
+
+export interface DeviceRegistrationCode {
+  code: string;
+  expiresAt: string | Date;
+  replaceDeviceId?: string | null;
+  deviceName: string;
+  deviceType: DeviceType;
+}

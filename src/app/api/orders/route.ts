@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdminAuth } from "@/lib/auth";
 import { checkRestaurantOpen } from "@/lib/openingHoursHelper";
 import { calculateOrderTotals, roundMoney } from "@/lib/money";
+import { publishOrderEvent } from "@/lib/orderEvents";
 
 const VALID_STATUSES = new Set([
   "PENDING",
@@ -261,6 +262,8 @@ export async function POST(request: NextRequest) {
             include: orderInclude,
           });
         }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5_000, timeout: 15_000 });
+
+        publishOrderEvent({ type: "order-created", order });
 
         return NextResponse.json(
           { success: true, data: withoutIdempotencyKey(order), message: `Order #${order.orderNumber} placed successfully!` },

@@ -15,7 +15,7 @@ export default function AdminLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // For /admin/login page, render clean standalone container
-  if (pathname === "/admin/login") {
+  if (pathname === "/admin/login" || pathname === "/admin/pos") {
     return <ToastProvider>{children}</ToastProvider>;
   }
 
