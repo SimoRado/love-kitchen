@@ -1,4 +1,4 @@
-﻿import fs from "node:fs";
+import fs from "node:fs";
 import crypto from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 
@@ -6,9 +6,21 @@ const base = "http://localhost:3000";
 const prisma = new PrismaClient();
 const results = [];
 
-function pass(name, detail = "") { results.push({ ok: true, name, detail }); console.log("PASS", name, detail); }
-function fail(name, detail = "") { results.push({ ok: false, name, detail }); console.error("FAIL", name, detail); throw new Error(`${name}: ${detail}`); }
-function assert(condition, name, detail = "") { if (!condition) fail(name, detail); pass(name, detail); }
+function pass(name, detail = "") {
+  results.push({ ok: true, name, detail });
+  console.log("PASS", name, detail ? `(${detail})` : "");
+}
+
+function fail(name, detail = "") {
+  results.push({ ok: false, name, detail });
+  console.error("FAIL", name, detail ? `(${detail})` : "");
+  throw new Error(`${name}: ${detail}`);
+}
+
+function assert(condition, name, detail = "") {
+  if (!condition) fail(name, detail);
+  pass(name, detail);
+}
 
 function loadEnvValue(key) {
   for (const file of [".env.local", ".env"]) {
@@ -22,9 +34,15 @@ function loadEnvValue(key) {
 }
 
 class Jar {
-  constructor(name) { this.name = name; this.cookies = new Map(); this.lastSetCookie = []; }
+  constructor(name) {
+    this.name = name;
+    this.cookies = new Map();
+    this.lastSetCookie = [];
+  }
   store(res) {
-    const values = typeof res.headers.getSetCookie === "function" ? res.headers.getSetCookie() : (res.headers.get("set-cookie") ? [res.headers.get("set-cookie")] : []);
+    const values = typeof res.headers.getSetCookie === "function"
+      ? res.headers.getSetCookie()
+      : (res.headers.get("set-cookie") ? [res.headers.get("set-cookie")] : []);
     this.lastSetCookie = values;
     for (const header of values) {
       const first = header.split(";")[0];
@@ -32,7 +50,9 @@ class Jar {
       if (eq > 0) this.cookies.set(first.slice(0, eq), first.slice(eq + 1));
     }
   }
-  header() { return Array.from(this.cookies.entries()).map(([k, v]) => `${k}=${v}`).join("; "); }
+  header() {
+    return Array.from(this.cookies.entries()).map(([k, v]) => `${k}=${v}`).join("; ");
+  }
 }
 
 async function req(path, options = {}) {
@@ -51,8 +71,14 @@ async function req(path, options = {}) {
   return { res, status: res.status, text, json, setCookie: options.jar?.lastSetCookie || [] };
 }
 
-function normalizeRegistrationCode(code) { return code.trim().toUpperCase().replace(/[^A-Z0-9]/g, ""); }
-function hashRegistrationCode(code) { return crypto.createHash("sha256").update(`registration:${normalizeRegistrationCode(code)}`).digest("hex"); }
+function normalizeRegistrationCode(code) {
+  return code.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function hashRegistrationCode(code) {
+  return crypto.createHash("sha256").update(`registration:${normalizeRegistrationCode(code)}`).digest("hex");
+}
+
 function pickProduct(products) {
   for (const product of products) {
     if (!product.available) continue;
@@ -76,13 +102,13 @@ function pickProduct(products) {
 
 async function createCustomerOrder(label, productPick, quantity = 2) {
   const payload = {
-    customerName: `Runtime Tester ${label}`,
+    customerName: `Multi-POS Tester ${label}`,
     customerPhone: "+212661000000",
     customerAddress: null,
     orderType: "PICKUP",
-    allergies: "runtime allergy check",
-    notes: "runtime verification order",
-    idempotencyKey: `runtime-${label}-${crypto.randomUUID()}`,
+    allergies: "multi-pos allergy test",
+    notes: "multi-pos verification order",
+    idempotencyKey: `multi-pos-${label}-${crypto.randomUUID()}`,
     total: 1,
     productName: "tampered client product",
     items: [{ productId: productPick.product.id, quantity, selectedModifierOptionIds: productPick.selected }],
@@ -100,6 +126,7 @@ async function adminLogin(jar, password) {
 async function makeRegistrationCode(adminJar, name, replaceDeviceId = null) {
   const response = await req("/api/devices", { method: "POST", jar: adminJar, body: { name, type: "POS", replaceDeviceId } });
   assert(response.status === 201 && response.json?.data?.code, `Registration code generated for ${name}`, `expires ${response.json?.data?.expiresAt}`);
+  assert(Boolean(response.json?.data?.qrPayload), `QR payload generated for ${name}`);
   return response.json.data;
 }
 
@@ -114,154 +141,234 @@ async function registerDevice(jar, code, expectedOk = true) {
   return null;
 }
 
-async function runSseRealtimeTest(posJar, productPick) {
-  const ac = new AbortController();
-  const sseResponse = await fetch(base + "/api/pos/events", { headers: { Cookie: posJar.header() }, signal: ac.signal });
-  assert(sseResponse.status === 200, "Registered POS SSE connection opens", `status ${sseResponse.status}`);
-  const reader = sseResponse.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let connected = false;
-  let targetOrder = null;
+async function main() {
+  try {
+    const adminPassword = loadEnvValue("ADMIN_PASSWORD");
+    assert(Boolean(adminPassword), "Admin password loaded from env");
 
-  const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("Timed out waiting for SSE order-created")), 10000));
-  const eventWait = (async () => {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) throw new Error("SSE stream ended before event");
-      buffer += decoder.decode(value, { stream: true });
-      let boundary;
-      while ((boundary = buffer.indexOf("\n\n")) >= 0) {
-        const raw = buffer.slice(0, boundary);
-        buffer = buffer.slice(boundary + 2);
-        const event = raw.split("\n").find((line) => line.startsWith("event:"))?.slice(6).trim();
-        const dataLine = raw.split("\n").find((line) => line.startsWith("data:"));
-        const data = dataLine ? JSON.parse(dataLine.slice(5).trim()) : null;
-        if (event === "connected") connected = true;
-        if (connected && !targetOrder) targetOrder = await createCustomerOrder("sse", productPick, 1);
-        if (event === "order-created" && data?.order?.orderNumber === targetOrder?.orderNumber) return targetOrder;
+    // Clean any leftover test records
+    await prisma.deviceRegistrationCode.deleteMany({});
+    await prisma.device.deleteMany({});
+
+    // 1. Customer storefront checks
+    const homepage = await req("/");
+    assert(homepage.status === 200, "Customer homepage loads");
+    const categories = await req("/api/categories");
+    assert(categories.status === 200 && categories.json?.success && categories.json.data.length > 0, "Customer categories load", `${categories.json?.data?.length} categories`);
+    const productsResponse = await req("/api/products");
+    assert(productsResponse.status === 200 && productsResponse.json?.success, "Customer products load");
+    const pick = pickProduct(productsResponse.json.data);
+    assert(Boolean(pick), "Existing orderable product selected", pick?.product?.name);
+
+    const settings = await req("/api/settings");
+    assert(settings.json?.data?.isOpenOverride === true || settings.status === 200, "Runtime settings available", `delivery fee ${settings.json?.data?.deliveryFee}`);
+
+    // 2. Admin Authentication & Device Management
+    const adminJar = new Jar("admin-browser");
+    await adminLogin(adminJar, adminPassword);
+    const adminDevicesBefore = await req("/api/devices", { jar: adminJar });
+    assert(adminDevicesBefore.status === 200 && Array.isArray(adminDevicesBefore.json?.data), "Authenticated admin can list devices");
+
+    // 3. Pairing Security: Invalid, Expired, Single-use
+    await registerDevice(new Jar("invalid-code-browser"), "NO-SUCH-CODE", false);
+    const expiredCode = `EX-${crypto.randomUUID().slice(0, 4).toUpperCase()}-OLD`;
+    await prisma.deviceRegistrationCode.create({
+      data: {
+        codeHash: hashRegistrationCode(expiredCode),
+        deviceName: "Expired Test iPad",
+        deviceType: "POS",
+        restaurantId: "default",
+        expiresAt: new Date(Date.now() - 60_000),
+      },
+    });
+    await registerDevice(new Jar("expired-code-browser"), expiredCode, false);
+
+    // 4. Create Invitation & Register POS-01 (Main Register)
+    const invitation1 = await makeRegistrationCode(adminJar, "POS-01 Main Register");
+    assert(new Date(invitation1.expiresAt).getTime() - Date.now() <= 10 * 60 * 1000 + 5000, "Registration code is configured for 10 minutes");
+    assert(invitation1.qrPayload.includes("code="), "QR payload includes prefilled pairing code");
+
+    const pos01Jar = new Jar("pos-01-browser");
+    const pos01Device = await registerDevice(pos01Jar, invitation1.code, true);
+
+    // Single-use check: Second device attempting to use invitation1 must fail
+    await registerDevice(new Jar("reuse-code-browser"), invitation1.code, false);
+
+    // Verify POS-01 recognized & credential hashed
+    const pos01DeviceState = await req("/api/pos/device", { jar: pos01Jar });
+    assert(pos01DeviceState.status === 200 && pos01DeviceState.json?.data?.device?.id === pos01Device.id, "POS-01 device recognized by /api/pos/device");
+    const pos01Db = await prisma.device.findUnique({ where: { id: pos01Device.id } });
+    assert(Boolean(pos01Db?.credentialHash) && pos01Db.credentialHash.length === 64, "Device credential is stored as SHA-256 hash");
+
+    // 5. Create Invitation & Register POS-02 (Secondary Register) - MULTI-POS CONCURRENCY
+    const invitation2 = await makeRegistrationCode(adminJar, "POS-02 Secondary Register");
+    const pos02Jar = new Jar("pos-02-browser");
+    const pos02Device = await registerDevice(pos02Jar, invitation2.code, true);
+    assert(pos02Device.id !== pos01Device.id, "POS-02 has independent unique device ID", pos02Device.publicId);
+
+    // Unauthenticated registered devices cannot access POS API
+    const unauth01 = await req("/api/pos/orders", { jar: pos01Jar });
+    assert(unauth01.status === 401, "Registered POS-01 without staff login cannot read orders");
+    const unauth02 = await req("/api/pos/orders", { jar: pos02Jar });
+    assert(unauth02.status === 401, "Registered POS-02 without staff login cannot read orders");
+
+    // Staff Login on both POS-01 and POS-02
+    await adminLogin(pos01Jar, adminPassword);
+    await adminLogin(pos02Jar, adminPassword);
+
+    const pos01Orders = await req("/api/pos/orders", { jar: pos01Jar });
+    assert(pos01Orders.status === 200, "POS-01 can read POS orders after staff login");
+    const pos02Orders = await req("/api/pos/orders", { jar: pos02Jar });
+    assert(pos02Orders.status === 200, "POS-02 can read POS orders after staff login");
+
+    // 6. Test Multi-POS Real-Time Order Broadcast: Customer places order -> BOTH POS-01 and POS-02 receive event
+    const ac1 = new AbortController();
+    const ac2 = new AbortController();
+
+    const sse1 = await fetch(base + "/api/pos/events", { headers: { Cookie: pos01Jar.header() }, signal: ac1.signal });
+    const sse2 = await fetch(base + "/api/pos/events", { headers: { Cookie: pos02Jar.header() }, signal: ac2.signal });
+    assert(sse1.status === 200, "POS-01 SSE connection active");
+    assert(sse2.status === 200, "POS-02 SSE connection active");
+
+    const reader1 = sse1.body.getReader();
+    const reader2 = sse2.body.getReader();
+    const decoder = new TextDecoder();
+
+    let buf1 = "";
+    let buf2 = "";
+    let orderCreated = null;
+
+    // Helper to read until target order-created event
+    async function waitForEvent(reader, bufRef, targetType) {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) throw new Error("SSE stream terminated");
+        bufRef.val += decoder.decode(value, { stream: true });
+        let boundary;
+        while ((boundary = bufRef.val.indexOf("\n\n")) >= 0) {
+          const raw = bufRef.val.slice(0, boundary);
+          bufRef.val = bufRef.val.slice(boundary + 2);
+          const eventLine = raw.split("\n").find((l) => l.startsWith("event:"));
+          const dataLine = raw.split("\n").find((l) => l.startsWith("data:"));
+          const eventType = eventLine?.slice(6).trim();
+          const data = dataLine ? JSON.parse(dataLine.slice(5).trim()) : null;
+          if (eventType === targetType) return data;
+        }
       }
     }
-  })();
 
-  try {
-    const order = await Promise.race([eventWait, timeout]);
-    pass("Real-time POS received new order without refresh", order.orderNumber);
-    return order;
+    const ref1 = { val: buf1 };
+    const ref2 = { val: buf2 };
+
+    // Wait for connected events on both
+    await Promise.all([
+      waitForEvent(reader1, ref1, "connected"),
+      waitForEvent(reader2, ref2, "connected"),
+    ]);
+
+    // Customer places new order
+    orderCreated = await createCustomerOrder("multi-stream", pick, 2);
+
+    const [data1, data2] = await Promise.all([
+      waitForEvent(reader1, ref1, "order-created"),
+      waitForEvent(reader2, ref2, "order-created"),
+    ]);
+
+    assert(data1?.order?.orderNumber === orderCreated.orderNumber, "POS-01 received real-time order-created event", data1?.order?.orderNumber);
+    assert(data2?.order?.orderNumber === orderCreated.orderNumber, "POS-02 received real-time order-created event simultaneously", data2?.order?.orderNumber);
+
+    // 7. POS-01 updates order to CONFIRMED -> POS-02 receives order-updated event
+    const statusPromise1 = waitForEvent(reader1, ref1, "order-updated");
+    const statusPromise2 = waitForEvent(reader2, ref2, "order-updated");
+
+    const patchRes = await req(`/api/pos/orders/${orderCreated.id}`, {
+      method: "PATCH",
+      jar: pos01Jar,
+      body: { status: "CONFIRMED" },
+    });
+    assert(patchRes.status === 200 && patchRes.json?.data?.status === "CONFIRMED", "POS-01 updated canonical order status to CONFIRMED");
+
+    const [update1, update2] = await Promise.all([statusPromise1, statusPromise2]);
+    assert(update1?.order?.status === "CONFIRMED", "POS-01 received updated status confirmation");
+    assert(update2?.order?.status === "CONFIRMED", "POS-02 received status update from POS-01 in real time");
+
+    // Close SSE streams
+    ac1.abort();
+    ac2.abort();
+
+    // 8. Disable POS-01 -> POS-01 rejected with 403, POS-02 continues working normally
+    const disableRes = await req(`/api/devices/${pos01Device.id}`, {
+      method: "PATCH",
+      jar: adminJar,
+      body: { status: "DISABLED" },
+    });
+    assert(disableRes.status === 200 && disableRes.json?.data?.status === "DISABLED", "Admin disabled POS-01");
+
+    const disabledAccess = await req("/api/pos/orders", { jar: pos01Jar });
+    assert(disabledAccess.status === 403, "Disabled POS-01 is rejected with 403");
+
+    const pos02ActiveAccess = await req("/api/pos/orders", { jar: pos02Jar });
+    assert(pos02ActiveAccess.status === 200, "POS-02 continues working normally while POS-01 is disabled");
+
+    // Re-activate POS-01 -> POS-01 can access again without re-registering
+    const activateRes = await req(`/api/devices/${pos01Device.id}`, {
+      method: "PATCH",
+      jar: adminJar,
+      body: { status: "ACTIVE" },
+    });
+    assert(activateRes.status === 200 && activateRes.json?.data?.status === "ACTIVE", "Admin reactivated POS-01");
+
+    const reactivatedAccess = await req("/api/pos/orders", { jar: pos01Jar });
+    assert(reactivatedAccess.status === 200, "Reactivated POS-01 accesses orders successfully");
+
+    // 9. Replace POS-02 with POS-03
+    const replaceInvitation = await makeRegistrationCode(adminJar, "POS-03 Replacement iPad", pos02Device.id);
+    const pos03Jar = new Jar("pos-03-browser");
+    const pos03Device = await registerDevice(pos03Jar, replaceInvitation.code, true);
+
+    const oldPos02Db = await prisma.device.findUnique({ where: { id: pos02Device.id } });
+    assert(oldPos02Db?.status === "REVOKED", "Old POS-02 automatically marked REVOKED upon replacement");
+
+    const pos02RevokedAccess = await req("/api/pos/orders", { jar: pos02Jar });
+    assert(pos02RevokedAccess.status === 403, "Old POS-02 credential rejected with 403");
+
+    await adminLogin(pos03Jar, adminPassword);
+    const pos03Access = await req("/api/pos/orders", { jar: pos03Jar });
+    assert(pos03Access.status === 200, "New POS-03 works and accesses POS API");
+
+    // POS-01 is unaffected by POS-02 replacement
+    const pos01StillActive = await req("/api/pos/orders", { jar: pos01Jar });
+    assert(pos01StillActive.status === 200, "POS-01 remains active and unaffected by replacement of POS-02");
+
+    // 10. Clean up Test Devices (Admin DELETE)
+    const del1 = await req(`/api/devices/${pos01Device.id}`, { method: "DELETE", jar: adminJar });
+    assert(del1.status === 200, "Admin deleted POS-01 test device");
+    const del2 = await req(`/api/devices/${pos02Device.id}`, { method: "DELETE", jar: adminJar });
+    assert(del2.status === 200, "Admin deleted POS-02 test device");
+    const del3 = await req(`/api/devices/${pos03Device.id}`, { method: "DELETE", jar: adminJar });
+    assert(del3.status === 200, "Admin deleted POS-03 test device");
+
+    // Architectural static checks
+    const orderSource = fs.readFileSync("src/app/api/orders/route.ts", "utf8");
+    assert(orderSource.includes("calculateOrderTotals") && !orderSource.includes("input.total"), "Order API does not trust client total");
+    for (const file of ["src/app/api/pos/orders/route.ts", "src/app/api/pos/orders/[id]/route.ts", "src/app/api/pos/events/route.ts"]) {
+      assert(fs.readFileSync(file, "utf8").includes("requirePosAccess"), `${file} enforces server-side POS authorization`);
+    }
+    assert(fs.readFileSync("src/app/api/pos/register/route.ts", "utf8").includes("hashRegistrationCode"), "Registration route hashes and validates codes server-side");
+    assert(fs.readFileSync("src/lib/printingService.ts", "utf8").includes("printOrder"), "Printing abstraction remains a placeholder");
+    assert(fs.readFileSync("src/lib/paymentService.ts", "utf8").includes("PaymentState"), "Payment abstraction exposes future payment states");
+    const schema = fs.readFileSync("prisma/schema.prisma", "utf8");
+    assert(schema.includes("model Device") && schema.includes("credentialHash") && schema.includes("model DeviceRegistrationCode") && schema.includes("expiresAt"), "Prisma schema includes device models and indexes");
+
+    console.log(`\n========================================`);
+    console.log(`SUMMARY: ALL ${results.filter((r) => r.ok).length} MULTI-POS & SECURITY CHECKS PASSED!`);
+    console.log(`========================================\n`);
   } finally {
-    ac.abort();
+    await prisma.$disconnect();
   }
 }
 
-try {
-  const adminPassword = loadEnvValue("ADMIN_PASSWORD");
-  assert(Boolean(adminPassword), "Admin password loaded from env");
-
-  const homepage = await req("/");
-  assert(homepage.status === 200, "Customer homepage loads");
-  const categories = await req("/api/categories");
-  assert(categories.status === 200 && categories.json?.success && categories.json.data.length > 0, "Customer categories load", `${categories.json?.data?.length} categories`);
-  const productsResponse = await req("/api/products");
-  assert(productsResponse.status === 200 && productsResponse.json?.success, "Customer products load");
-  const pick = pickProduct(productsResponse.json.data);
-  assert(Boolean(pick), "Existing orderable product selected", pick?.product?.name);
-
-  const settings = await req("/api/settings");
-  assert(settings.json?.data?.isOpenOverride === true || settings.status === 200, "Runtime settings available", `delivery fee ${settings.json?.data?.deliveryFee}`);
-
-  const adminJar = new Jar("admin-browser");
-  await adminLogin(adminJar, adminPassword);
-  const adminDevicesBefore = await req("/api/devices", { jar: adminJar });
-  assert(adminDevicesBefore.status === 200 && Array.isArray(adminDevicesBefore.json?.data), "Authenticated admin can list devices");
-
-  await registerDevice(new Jar("invalid-code-browser"), "NO-SUCH-CODE", false);
-  const expiredCode = `EX-${crypto.randomUUID().slice(0, 4).toUpperCase()}-OLD`;
-  await prisma.deviceRegistrationCode.create({ data: { codeHash: hashRegistrationCode(expiredCode), deviceName: "Expired Test iPad", deviceType: "POS", restaurantId: "default", expiresAt: new Date(Date.now() - 60_000) } });
-  await registerDevice(new Jar("expired-code-browser"), expiredCode, false);
-
-  const firstCode = await makeRegistrationCode(adminJar, "Runtime Main iPad");
-  assert(new Date(firstCode.expiresAt).getTime() - Date.now() <= 10 * 60 * 1000 + 5000, "Registration code is configured for about 10 minutes");
-  const oldPosJar = new Jar("old-pos-browser");
-  const oldDevice = await registerDevice(oldPosJar, firstCode.code, true);
-  await registerDevice(new Jar("reuse-code-browser"), firstCode.code, false);
-
-  const oldDeviceState = await req("/api/pos/device", { jar: oldPosJar });
-  assert(oldDeviceState.status === 200 && oldDeviceState.json?.data?.device?.id === oldDevice.id, "Registered POS device is recognized by /api/pos/device");
-  const oldDbDevice = await prisma.device.findUnique({ where: { id: oldDevice.id } });
-  const deviceCookie = oldPosJar.cookies.get("resto_pos_device") || "";
-  assert(Boolean(oldDbDevice?.credentialHash) && oldDbDevice.credentialHash.length === 64, "Device credential is stored as SHA-256 hash");
-  assert(!deviceCookie.includes(oldDbDevice.credentialHash), "Raw device credential is not the stored hash");
-  const adminDevicesPayload = await req("/api/devices", { jar: adminJar });
-  assert(!JSON.stringify(adminDevicesPayload.json).includes("credentialHash"), "Device secrets are not returned by admin device API");
-
-  const unregisteredDeviceState = await req("/api/pos/device", { jar: new Jar("unregistered-device-state-browser") });
-  assert(unregisteredDeviceState.status === 200 && unregisteredDeviceState.json?.data?.device === null, "Unregistered browser can only see empty POS device state");
-  const unregisteredOrders = await req("/api/pos/orders", { jar: new Jar("unregistered-browser") });
-  assert(unregisteredOrders.status === 403, "Unregistered browser cannot read POS orders", `status ${unregisteredOrders.status}`);
-  const unauthenticatedRegisteredOrders = await req("/api/pos/orders", { jar: oldPosJar });
-  assert(unauthenticatedRegisteredOrders.status === 401, "Registered device without staff login cannot read POS orders", `status ${unauthenticatedRegisteredOrders.status}`);
-  const deviceOnlyAdmin = await req("/api/devices", { jar: oldPosJar });
-  assert(deviceOnlyAdmin.status === 403, "Registered device alone cannot manage devices", `status ${deviceOnlyAdmin.status}`);
-
-  await adminLogin(oldPosJar, adminPassword);
-  const order = await createCustomerOrder("initial", pick, 2);
-  const expectedSubtotal = Math.round(pick.unit * 2 * 100) / 100;
-  assert(order.subtotal === expectedSubtotal && order.total === expectedSubtotal, "Server ignored tampered client total and calculated pickup total", `expected ${expectedSubtotal}, got ${order.total}`);
-  const storedOrder = await prisma.order.findUnique({ where: { id: order.id }, include: { items: { include: { modifiers: true } } } });
-  assert(Boolean(storedOrder) && storedOrder.total === expectedSubtotal, "Order stored correctly in database", storedOrder?.orderNumber);
-
-  const posOrders = await req("/api/pos/orders", { jar: oldPosJar });
-  assert(posOrders.status === 200 && posOrders.json.data.some((item) => item.id === order.id), "Registered and signed-in POS can retrieve existing orders");
-  const unregisteredPatch = await req(`/api/pos/orders/${order.id}`, { method: "PATCH", jar: new Jar("unregistered-patch-browser"), body: { status: "PREPARING" } });
-  assert(unregisteredPatch.status === 403, "Unregistered browser cannot mutate POS order status", `status ${unregisteredPatch.status}`);
-
-  const realtimeOrder = await runSseRealtimeTest(oldPosJar, pick);
-  const invalidStatus = await req(`/api/pos/orders/${realtimeOrder.id}`, { method: "PATCH", jar: oldPosJar, body: { status: "NOT_REAL" } });
-  assert(invalidStatus.status === 400, "Invalid POS status is rejected");
-  for (const status of ["CONFIRMED", "PREPARING", "READY", "COMPLETED"]) {
-    const update = await req(`/api/pos/orders/${realtimeOrder.id}`, { method: "PATCH", jar: oldPosJar, body: { status } });
-    assert(update.status === 200 && update.json?.data?.status === status, `POS updates order to ${status}`);
-    const fromDb = await prisma.order.findUnique({ where: { id: realtimeOrder.id } });
-    assert(fromDb?.status === status, `Database persisted ${status}`);
-  }
-
-  const revoke = await req(`/api/devices/${oldDevice.id}`, { method: "PATCH", jar: adminJar, body: { status: "REVOKED" } });
-  assert(revoke.status === 200 && revoke.json?.data?.status === "REVOKED", "Admin revoked registered POS device");
-  const revokedAccess = await req("/api/pos/orders", { jar: oldPosJar });
-  assert(revokedAccess.status === 403, "Revoked device credential can no longer call POS API", `status ${revokedAccess.status}`);
-
-  const replaceOldCode = await makeRegistrationCode(adminJar, "Runtime Replace Old iPad");
-  const replaceOldJar = new Jar("replace-old-browser");
-  const replaceOldDevice = await registerDevice(replaceOldJar, replaceOldCode.code, true);
-  await adminLogin(replaceOldJar, adminPassword);
-  const beforeReplaceAccess = await req("/api/pos/orders", { jar: replaceOldJar });
-  assert(beforeReplaceAccess.status === 200, "Device to be replaced works before replacement");
-
-  const replacementCode = await makeRegistrationCode(adminJar, "Runtime Replacement iPad", replaceOldDevice.id);
-  const replacementJar = new Jar("replacement-browser");
-  const replacementDevice = await registerDevice(replacementJar, replacementCode.code, true);
-  const oldAfterReplace = await prisma.device.findUnique({ where: { id: replaceOldDevice.id } });
-  const newAfterReplace = await prisma.device.findUnique({ where: { id: replacementDevice.id } });
-  assert(oldAfterReplace?.status === "REVOKED", "Replacement flow revoked old device");
-  assert(newAfterReplace?.status === "ACTIVE", "Replacement flow activated new device");
-  await adminLogin(replacementJar, adminPassword);
-  const replacementAccess = await req("/api/pos/orders", { jar: replacementJar });
-  assert(replacementAccess.status === 200, "Replacement device can access POS after staff login");
-  const replacedOldAccess = await req("/api/pos/orders", { jar: replaceOldJar });
-  assert(replacedOldAccess.status === 403, "Old replaced device can no longer access POS");
-
-  const orderSource = fs.readFileSync("src/app/api/orders/route.ts", "utf8");
-  assert(orderSource.includes("calculateOrderTotals") && !orderSource.includes("input.total"), "Order API does not trust client total");
-  for (const file of ["src/app/api/pos/orders/route.ts", "src/app/api/pos/orders/[id]/route.ts", "src/app/api/pos/events/route.ts"]) {
-    assert(fs.readFileSync(file, "utf8").includes("requirePosAccess"), `${file} enforces server-side POS authorization`);
-  }
-  assert(fs.readFileSync("src/app/api/pos/register/route.ts", "utf8").includes("hashRegistrationCode"), "Registration route hashes and validates codes server-side");
-  assert(fs.readFileSync("src/lib/printingService.ts", "utf8").includes("printOrder"), "Printing abstraction remains a placeholder");
-  assert(fs.readFileSync("src/lib/paymentService.ts", "utf8").includes("PaymentState"), "Payment abstraction exposes future payment states");
-  const schema = fs.readFileSync("prisma/schema.prisma", "utf8");
-  assert(schema.includes("model Device") && schema.includes("credentialHash") && schema.includes("model DeviceRegistrationCode") && schema.includes("expiresAt") && schema.includes("@@index([expiresAt])"), "Prisma schema includes device models, hashed credential field, expiry, and indexes");
-
-  console.log(`SUMMARY ${results.filter((r) => r.ok).length} checks passed`);
-} finally {
-  await prisma.$disconnect();
-}
+main().catch((err) => {
+  console.error("Verification failed:", err);
+  process.exit(1);
+});

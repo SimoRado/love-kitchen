@@ -7,7 +7,7 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-const VALID_STATUSES = new Set(["ACTIVE", "INACTIVE", "REVOKED"]);
+const VALID_STATUSES = new Set(["ACTIVE", "INACTIVE", "DISABLED", "REVOKED"]);
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const authError = await requireDeviceManagementAccess(request);
@@ -34,7 +34,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const device = await prisma.device.update({ where: { id }, data });
-    if (device.status === "REVOKED") {
+    if (device.status === "REVOKED" || device.status === "DISABLED" || device.status === "INACTIVE") {
       publishOrderEvent({ type: "device-revoked", deviceId: device.id });
     }
 
@@ -47,5 +47,29 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   } catch (error) {
     console.error("Failed to update device:", error);
     return NextResponse.json({ success: false, error: "Could not update device." }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  const authError = await requireDeviceManagementAccess(request);
+  if (authError) return authError;
+
+  try {
+    const { id } = await params;
+    const existing = await prisma.device.findUnique({ where: { id } });
+    if (!existing) {
+      return NextResponse.json({ success: false, error: "Device not found." }, { status: 404 });
+    }
+
+    await prisma.$transaction([
+      prisma.deviceRegistrationCode.deleteMany({ where: { replaceDeviceId: id } }),
+      prisma.device.delete({ where: { id } }),
+    ]);
+
+    publishOrderEvent({ type: "device-revoked", deviceId: id });
+    return NextResponse.json({ success: true, message: "Device deleted successfully." });
+  } catch (error) {
+    console.error("Failed to delete device:", error);
+    return NextResponse.json({ success: false, error: "Could not delete device." }, { status: 500 });
   }
 }

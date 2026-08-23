@@ -161,7 +161,7 @@ export interface ApiResponse<T = unknown> {
 }
 
 export type DeviceType = "POS" | "KITCHEN" | "ADMIN";
-export type DeviceStatus = "ACTIVE" | "INACTIVE" | "REVOKED";
+export type DeviceStatus = "ACTIVE" | "INACTIVE" | "DISABLED" | "REVOKED";
 
 export interface Device {
   id: string;
@@ -177,9 +177,12 @@ export interface Device {
 }
 
 export interface DeviceRegistrationCode {
+  id?: string;
   code: string;
   expiresAt: string | Date;
+  usedAt?: string | Date | null;
   replaceDeviceId?: string | null;
   deviceName: string;
   deviceType: DeviceType;
+  qrPayload?: string;
 }

@@ -38,8 +38,27 @@ export async function GET(request: NextRequest) {
   const authError = await requireDeviceManagementAccess(request);
   if (authError) return authError;
 
-  const devices = await prisma.device.findMany({ orderBy: [{ type: "asc" }, { createdAt: "asc" }] });
-  return NextResponse.json({ success: true, data: devices.map(safeDevice) });
+  const [devices, pendingCodes] = await Promise.all([
+    prisma.device.findMany({ orderBy: [{ type: "asc" }, { createdAt: "desc" }] }),
+    prisma.deviceRegistrationCode.findMany({
+      where: { usedAt: null, expiresAt: { gt: new Date() } },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
+
+  return NextResponse.json({
+    success: true,
+    data: devices.map(safeDevice),
+    invitations: pendingCodes.map((c) => ({
+      id: c.id,
+      code: "PROTECTED", // Do not expose plaintext hash in generic list unless created
+      expiresAt: c.expiresAt,
+      deviceName: c.deviceName,
+      deviceType: c.deviceType,
+      replaceDeviceId: c.replaceDeviceId,
+      createdAt: c.createdAt,
+    })),
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -76,14 +95,20 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Clean pairing payload for QR code (points to POS pairing screen with prefilled code)
+    const origin = request.nextUrl.origin;
+    const qrPayload = `${origin}/admin/pos?code=${encodeURIComponent(code)}`;
+
     return NextResponse.json({
       success: true,
       data: {
+        id: registration.id,
         code,
         expiresAt: registration.expiresAt,
         replaceDeviceId,
         deviceName: registration.deviceName,
         deviceType: registration.deviceType,
+        qrPayload,
       },
     }, { status: 201 });
   } catch (error) {

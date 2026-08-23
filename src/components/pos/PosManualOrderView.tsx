@@ -21,6 +21,8 @@ import { calculateOrderTotals, calculateItemTotal } from "@/lib/money";
 import { hasActiveModifiers } from "@/lib/constants";
 import { generateCartItemId, calculateConfiguredPrice } from "@/store/useCartStore";
 import PosModifierModal from "./PosModifierModal";
+import PosSidebarHeader from "./PosSidebarHeader";
+import { PosTab } from "./PosHeader";
 
 interface PosManualOrderViewProps {
   categories: Category[];
@@ -28,6 +30,16 @@ interface PosManualOrderViewProps {
   currency?: string;
   deliveryFee?: number;
   onOrderCreated: (newOrderNumber: string) => void;
+  // Navigation & status props for unified right sidebar
+  activeTab: PosTab;
+  onTabChange: (tab: PosTab) => void;
+  pendingCount: number;
+  activeCount: number;
+  deviceName?: string;
+  devicePublicId?: string;
+  isConnected: boolean;
+  onRefresh: () => void;
+  isRefreshing?: boolean;
 }
 
 export default function PosManualOrderView({
@@ -36,8 +48,17 @@ export default function PosManualOrderView({
   currency = "MAD",
   deliveryFee = 15,
   onOrderCreated,
+  activeTab,
+  onTabChange,
+  pendingCount,
+  activeCount,
+  deviceName,
+  devicePublicId,
+  isConnected,
+  onRefresh,
+  isRefreshing,
 }: PosManualOrderViewProps) {
-  // Navigation & filtering
+  // Filtering & search
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -49,7 +70,7 @@ export default function PosManualOrderView({
   const [allergies, setAllergies] = useState("");
   const [notes, setNotes] = useState("");
 
-  // Clear confirmation modal/dialog state
+  // Clear confirmation modal
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   // Customization Modal State
@@ -95,13 +116,11 @@ export default function PosManualOrderView({
   // Fast Product Tap
   const handleProductTap = (product: Product) => {
     if (hasActiveModifiers(product)) {
-      // Open customization modal
       setConfiguringProduct(product);
       setEditingCartItemId(null);
       setModalInitialSelections([]);
       setModalInitialQuantity(1);
     } else {
-      // 1-tap fast add / increment
       const itemId = generateCartItemId(product.id, []);
       const configuredUnitPrice = product.price;
 
@@ -129,7 +148,7 @@ export default function PosManualOrderView({
     }
   };
 
-  // Modifier Modal Confirm (Add or Edit)
+  // Modifier Modal Confirm
   const handleModifierConfirm = (
     selectedModifiers: SelectedModifierOptionSnapshot[],
     quantity: number
@@ -144,11 +163,9 @@ export default function PosManualOrderView({
 
     setCartItems((prev) => {
       if (editingCartItemId) {
-        // Editing existing line
         const withoutOld = prev.filter((it) => it.id !== editingCartItemId);
         const existingTargetIndex = withoutOld.findIndex((it) => it.id === itemId);
         if (existingTargetIndex > -1) {
-          // Merge with identical existing line
           withoutOld[existingTargetIndex] = {
             ...withoutOld[existingTargetIndex],
             quantity: withoutOld[existingTargetIndex].quantity + quantity,
@@ -169,7 +186,6 @@ export default function PosManualOrderView({
         ];
       }
 
-      // Adding new line
       const existingIndex = prev.findIndex((it) => it.id === itemId);
       if (existingIndex > -1) {
         const next = [...prev];
@@ -197,7 +213,6 @@ export default function PosManualOrderView({
     setEditingCartItemId(null);
   };
 
-  // Edit item customizations
   const handleEditItem = (item: CartItem) => {
     setConfiguringProduct(item.product);
     setEditingCartItemId(item.id);
@@ -205,7 +220,6 @@ export default function PosManualOrderView({
     setModalInitialQuantity(item.quantity);
   };
 
-  // Quantity changes
   const handleUpdateQuantity = (itemId: string, newQty: number) => {
     if (newQty <= 0) {
       handleRemoveItem(itemId);
@@ -216,12 +230,10 @@ export default function PosManualOrderView({
     );
   };
 
-  // Remove single line item
   const handleRemoveItem = (itemId: string) => {
     setCartItems((prev) => prev.filter((it) => it.id !== itemId));
   };
 
-  // Clear entire cart with confirmation
   const handleClearClick = () => {
     if (cartItems.length === 0) return;
     setShowClearConfirm(true);
@@ -236,7 +248,6 @@ export default function PosManualOrderView({
     setShowClearConfirm(false);
   };
 
-  // Submit manual POS order
   const handleCreateOrder = async () => {
     if (cartItems.length === 0 || isSubmitting) return;
 
@@ -266,7 +277,6 @@ export default function PosManualOrderView({
 
       const data = await res.json();
       if (data.success && data.data) {
-        // Reset manual order state
         setCartItems([]);
         setCustomerName("");
         setCustomerPhone("");
@@ -285,46 +295,46 @@ export default function PosManualOrderView({
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[1fr_310px] xl:grid-cols-[1fr_340px] 2xl:grid-cols-[1fr_380px] gap-4 sm:gap-5 h-[calc(100vh-5.5rem)] items-stretch">
-      {/* LEFT / MAIN AREA (72-75% on iPad/Desktop): Menu Catalog */}
-      <div className="flex flex-col bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden min-w-0">
-        {/* Top: Category Tabs & Search Bar */}
-        <div className="p-3.5 sm:p-4 border-b border-slate-200 space-y-3 bg-slate-50 shrink-0">
-          {/* Search Input */}
+    <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_310px] xl:grid-cols-[1fr_340px] 2xl:grid-cols-[1fr_380px] gap-2.5 sm:gap-3 h-full overflow-hidden items-stretch min-h-0">
+      {/* 1. LEFT MAIN AREA (~74% on iPad/Desktop): Menu Catalog */}
+      <div className="flex flex-col bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden min-w-0 h-full">
+        {/* Top: Compact Search Bar & Category Navigation */}
+        <div className="p-2 sm:p-2.5 border-b border-slate-200 space-y-1.5 bg-slate-50 shrink-0">
+          {/* Compact Search Input */}
           <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search dishes or drinks..."
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-colors"
+              className="w-full pl-8 pr-8 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-medium focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-colors"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 hover:text-slate-700"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 hover:text-slate-700"
               >
-                Clear
+                ✕
               </button>
             )}
           </div>
 
-          {/* Refined Prominent Category Pills Bar */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+          {/* Compact Category Navigation Bar */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
             <button
               type="button"
               onClick={() => setSelectedCategoryId("ALL")}
-              className={`px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm font-extrabold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 shrink-0 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-black whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 shrink-0 min-h-[34px] ${
                 selectedCategoryId === "ALL"
-                  ? "bg-slate-950 text-white shadow-sm ring-1 ring-white/10"
-                  : "bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-950 border border-slate-200 shadow-2xs"
+                  ? "bg-slate-950 text-white shadow-xs"
+                  : "bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-950 border border-slate-200"
               }`}
             >
               <span>All Items</span>
               <span
-                className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
+                className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
                   selectedCategoryId === "ALL"
                     ? "bg-white/20 text-white"
                     : "bg-slate-100 text-slate-600"
@@ -343,15 +353,15 @@ export default function PosManualOrderView({
                   key={cat.id}
                   type="button"
                   onClick={() => setSelectedCategoryId(cat.id)}
-                  className={`px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm font-extrabold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 shrink-0 ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 shrink-0 min-h-[34px] ${
                     isSelected
-                      ? "bg-slate-950 text-white shadow-sm ring-1 ring-white/10"
-                      : "bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-950 border border-slate-200 shadow-2xs"
+                      ? "bg-slate-950 text-white shadow-xs"
+                      : "bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-950 border border-slate-200"
                   }`}
                 >
                   <span>{cat.name}</span>
                   <span
-                    className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
                       isSelected ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"
                     }`}
                   >
@@ -363,10 +373,10 @@ export default function PosManualOrderView({
           </div>
         </div>
 
-        {/* Product Cards Grid with Food Images */}
-        <div className="flex-1 overflow-y-auto p-3.5 sm:p-5">
+        {/* High-Density Compact Product Grid with Food Images */}
+        <div className="flex-1 overflow-y-auto p-2.5 sm:p-3 min-h-0">
           {filteredProducts.length > 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3.5 sm:gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2.5 sm:gap-3">
               {filteredProducts.map((product) => {
                 const hasOptions = hasActiveModifiers(product);
 
@@ -375,10 +385,10 @@ export default function PosManualOrderView({
                     key={product.id}
                     type="button"
                     onClick={() => handleProductTap(product)}
-                    className="group relative rounded-2xl border border-slate-200 bg-white hover:border-orange-500 hover:shadow-md active:scale-[0.98] transition-all text-left flex flex-col justify-between overflow-hidden shadow-2xs cursor-pointer min-w-0"
+                    className="group relative rounded-xl border border-slate-200/90 bg-white hover:border-orange-500 hover:shadow-md active:scale-[0.97] transition-all text-left flex flex-col justify-between overflow-hidden cursor-pointer min-w-0 shadow-2xs"
                   >
-                    {/* 1. Food Image Header with Aspect Ratio & Fallback */}
-                    <div className="relative w-full aspect-[16/10] sm:aspect-[4/3] bg-slate-100 overflow-hidden shrink-0">
+                    {/* Compact Image */}
+                    <div className="relative w-full aspect-[16/10] bg-slate-100 overflow-hidden shrink-0">
                       {product.image ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -392,39 +402,31 @@ export default function PosManualOrderView({
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center bg-orange-50/60 text-orange-400">
-                          <UtensilsCrossed className="w-8 h-8 opacity-40" />
+                          <UtensilsCrossed className="w-6 h-6 opacity-40" />
                         </div>
                       )}
 
-                      {/* Customization Options Indicator Badge Overlay */}
+                      {/* Customizable options badge overlay */}
                       {hasOptions && (
-                        <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-950/80 backdrop-blur-xs text-white text-[10px] font-extrabold tracking-wider uppercase shadow-xs">
-                          <SlidersHorizontal className="w-3 h-3 text-orange-400" />
-                          <span>Customizable</span>
+                        <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-slate-950/80 backdrop-blur-xs text-white text-[9px] font-black uppercase tracking-wider shadow-xs">
+                          <SlidersHorizontal className="w-2.5 h-2.5 text-orange-400" />
+                          <span>Options</span>
                         </div>
                       )}
                     </div>
 
-                    {/* 2. Card Body: Title & Short Description */}
-                    <div className="p-3 sm:p-3.5 flex-1 flex flex-col justify-between">
-                      <div>
-                        <h4 className="font-extrabold text-xs sm:text-sm text-slate-900 group-hover:text-orange-950 line-clamp-2 leading-snug tracking-tight">
-                          {product.name}
-                        </h4>
-                        {product.description && (
-                          <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5 font-normal">
-                            {product.description}
-                          </p>
-                        )}
-                      </div>
+                    {/* Compact Card Body */}
+                    <div className="p-2 sm:p-2.5 flex-1 flex flex-col justify-between">
+                      <h4 className="font-extrabold text-xs sm:text-[13px] text-slate-900 group-hover:text-orange-950 line-clamp-1 leading-snug tracking-tight">
+                        {product.name}
+                      </h4>
 
-                      {/* 3. Card Footer: Price & Touch Action Button */}
-                      <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                      <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex items-center justify-between gap-1">
                         <span className="text-xs sm:text-sm font-black text-slate-950 font-mono">
                           {formatCurrency(product.price, currency)}
                         </span>
                         <span
-                          className={`text-[10px] sm:text-[11px] font-extrabold px-2 py-1 rounded-lg transition-colors shrink-0 uppercase tracking-wider ${
+                          className={`text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded-md transition-colors shrink-0 uppercase tracking-wider ${
                             hasOptions
                               ? "bg-orange-100 text-orange-800 group-hover:bg-orange-600 group-hover:text-white"
                               : "bg-slate-100 text-slate-800 group-hover:bg-orange-600 group-hover:text-white"
@@ -440,22 +442,84 @@ export default function PosManualOrderView({
             </div>
           ) : (
             <div className="h-full flex flex-col items-center justify-center p-8 text-center text-slate-400">
-              <ShoppingBag className="w-12 h-12 mb-2 text-slate-300" />
+              <ShoppingBag className="w-10 h-10 mb-2 text-slate-300" />
               <p className="text-sm font-bold text-slate-600">No dishes match your selection</p>
-              <p className="text-xs text-slate-400 mt-1">Try picking another category or clear search</p>
+              <p className="text-xs text-slate-400 mt-0.5">Try picking another category or clear search</p>
             </div>
           )}
         </div>
       </div>
 
-      {/* RIGHT SIDE (~26-28% on iPad/Desktop): Current Order Panel (Always Visible) */}
-      <div className="flex flex-col bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden min-w-0">
-        {/* Header: Title & Clear Order */}
-        <div className="p-3.5 sm:p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50 shrink-0">
-          <div className="flex items-center gap-2">
-            <h3 className="font-extrabold text-sm sm:text-base text-slate-900">Current Order</h3>
+      {/* 2. RIGHT SIDEBAR (~26% on iPad/Desktop): Permanent Register Control Area */}
+      <div className="flex flex-col bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden min-w-0 h-full">
+        {/* Top: Terminal Status & Segmented Navigation Control */}
+        <PosSidebarHeader
+          activeTab={activeTab}
+          onTabChange={onTabChange}
+          pendingCount={pendingCount}
+          activeCount={activeCount}
+          deviceName={deviceName}
+          devicePublicId={devicePublicId}
+          isConnected={isConnected}
+          onRefresh={onRefresh}
+          isRefreshing={isRefreshing}
+        />
+
+        {/* Order Type & Customer Details Selector */}
+        <div className="p-2.5 border-b border-slate-100 bg-white space-y-1.5 shrink-0">
+          <div className="grid grid-cols-2 gap-1">
+            <button
+              type="button"
+              onClick={() => setOrderType("PICKUP")}
+              className={`py-1.5 px-2 rounded-lg text-xs font-black flex items-center justify-center gap-1 transition-all cursor-pointer min-h-[34px] ${
+                orderType === "PICKUP"
+                  ? "bg-slate-900 text-white shadow-xs"
+                  : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+              }`}
+            >
+              <ShoppingBag className="w-3 h-3" />
+              <span>Dine-In / Pickup</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setOrderType("DELIVERY")}
+              className={`py-1.5 px-2 rounded-lg text-xs font-black flex items-center justify-center gap-1 transition-all cursor-pointer min-h-[34px] ${
+                orderType === "DELIVERY"
+                  ? "bg-purple-700 text-white shadow-xs"
+                  : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+              }`}
+            >
+              <Truck className="w-3 h-3" />
+              <span>Delivery</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-1">
+            <input
+              type="text"
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+              placeholder="Customer / Table #"
+              className="px-2 py-1 rounded-lg border border-slate-200 text-xs bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-orange-500 font-medium truncate"
+            />
+            <input
+              type="text"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Note (optional)"
+              className="px-2 py-1 rounded-lg border border-slate-200 text-xs bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-orange-500 font-medium truncate"
+            />
+          </div>
+        </div>
+
+        {/* Current Order Title & Clear */}
+        <div className="px-3 py-1.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70 shrink-0">
+          <div className="flex items-center gap-1.5">
+            <h3 className="font-extrabold text-xs text-slate-900 uppercase tracking-wider">
+              Current Order
+            </h3>
             {cartItems.length > 0 && (
-              <span className="px-2 py-0.5 rounded-full text-xs font-black bg-orange-600 text-white">
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-orange-600 text-white">
                 {cartItems.reduce((sum, it) => sum + it.quantity, 0)}
               </span>
             )}
@@ -465,63 +529,15 @@ export default function PosManualOrderView({
             type="button"
             onClick={handleClearClick}
             disabled={cartItems.length === 0}
-            className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-red-600 hover:bg-red-50 active:bg-red-100 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer flex items-center gap-1.5"
+            className="px-2 py-0.5 rounded text-[11px] font-bold text-red-600 hover:bg-red-50 active:bg-red-100 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer flex items-center gap-1"
           >
-            <RotateCcw className="w-3.5 h-3.5" />
+            <RotateCcw className="w-3 h-3" />
             <span>Clear</span>
           </button>
         </div>
 
-        {/* Order Type & Fast Details Selector */}
-        <div className="p-3 border-b border-slate-100 bg-white space-y-2 shrink-0">
-          <div className="grid grid-cols-2 gap-1.5">
-            <button
-              type="button"
-              onClick={() => setOrderType("PICKUP")}
-              className={`py-2 px-2.5 rounded-lg text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                orderType === "PICKUP"
-                  ? "bg-slate-900 text-white shadow-xs"
-                  : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-              }`}
-            >
-              <ShoppingBag className="w-3.5 h-3.5" />
-              <span>Dine-In / Pickup</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setOrderType("DELIVERY")}
-              className={`py-2 px-2.5 rounded-lg text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                orderType === "DELIVERY"
-                  ? "bg-purple-700 text-white shadow-xs"
-                  : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-              }`}
-            >
-              <Truck className="w-3.5 h-3.5" />
-              <span>Delivery</span>
-            </button>
-          </div>
-
-          {/* Quick optional customer label */}
-          <div className="grid grid-cols-2 gap-1.5">
-            <input
-              type="text"
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-              placeholder="Customer / Table #"
-              className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-orange-500 font-medium truncate"
-            />
-            <input
-              type="text"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Note (optional)"
-              className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-orange-500 font-medium truncate"
-            />
-          </div>
-        </div>
-
-        {/* Scrollable Items List */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        {/* Independently Scrollable Items List */}
+        <div className="flex-1 overflow-y-auto p-2.5 space-y-1.5 min-h-0">
           {cartItems.length > 0 ? (
             cartItems.map((item) => {
               const lineTotal = calculateItemTotal(item.configuredUnitPrice, item.quantity);
@@ -530,7 +546,7 @@ export default function PosManualOrderView({
               return (
                 <div
                   key={item.id}
-                  className="p-2.5 rounded-xl border border-slate-200 bg-white hover:border-slate-300 shadow-2xs space-y-1.5"
+                  className="p-2 rounded-xl border border-slate-200 bg-white hover:border-slate-300 shadow-2xs space-y-1"
                 >
                   <div className="flex items-start justify-between gap-1.5">
                     <div className="min-w-0 flex-1">
@@ -542,7 +558,7 @@ export default function PosManualOrderView({
                           <button
                             type="button"
                             onClick={() => handleEditItem(item)}
-                            className="p-1 text-slate-400 hover:text-orange-600 rounded hover:bg-orange-50 transition-colors"
+                            className="p-0.5 text-slate-400 hover:text-orange-600 rounded transition-colors"
                             title="Edit modifiers"
                           >
                             <Edit2 className="w-3 h-3" />
@@ -552,7 +568,7 @@ export default function PosManualOrderView({
 
                       {/* Selected Modifiers list */}
                       {item.selectedModifiers && item.selectedModifiers.length > 0 && (
-                        <div className="mt-1 space-y-0.5 text-[10px] text-slate-600 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
+                        <div className="mt-0.5 space-y-0.5 text-[10px] text-slate-600 bg-slate-50 p-1 rounded border border-slate-100">
                           {item.selectedModifiers.map((mod) => (
                             <p key={mod.optionId} className="flex justify-between leading-tight">
                               <span>+ {mod.optionName}</span>
@@ -567,14 +583,13 @@ export default function PosManualOrderView({
                       )}
                     </div>
 
-                    {/* Line Total */}
                     <span className="font-black text-xs text-slate-900 shrink-0 font-mono">
                       {formatCurrency(lineTotal, currency)}
                     </span>
                   </div>
 
                   {/* Quantity & Delete Controls */}
-                  <div className="flex items-center justify-between border-t border-slate-100 pt-1.5">
+                  <div className="flex items-center justify-between border-t border-slate-100 pt-1">
                     <div className="flex items-center border border-slate-200 rounded-lg bg-slate-50 p-0.5">
                       <button
                         type="button"
@@ -610,27 +625,25 @@ export default function PosManualOrderView({
               );
             })
           ) : (
-            <div className="h-full flex flex-col items-center justify-center p-6 text-center text-slate-400">
-              <ShoppingBag className="w-9 h-9 mb-2 text-slate-300" />
+            <div className="h-full flex flex-col items-center justify-center p-4 text-center text-slate-400">
+              <ShoppingBag className="w-8 h-8 mb-1.5 text-slate-300" />
               <p className="text-xs font-bold text-slate-600">Order is empty</p>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                Tap items on the left menu to add them
-              </p>
+              <p className="text-[10px] text-slate-400 mt-0.5">Tap menu items to add</p>
             </div>
           )}
         </div>
 
-        {/* BOTTOM CALCULATION / CALCULATOR & CHECKOUT AREA */}
-        <div className="p-3.5 sm:p-4 border-t border-slate-200 bg-slate-50 space-y-2.5 shrink-0">
+        {/* 3. FIXED BOTTOM PAYMENT SECTION (Always Visible) */}
+        <div className="p-3 border-t border-slate-200 bg-slate-50 space-y-2 shrink-0">
           {errorMessage && (
-            <div className="p-2 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs font-bold">
+            <div className="p-1.5 rounded-lg bg-red-50 border border-red-200 text-red-800 text-[11px] font-bold">
               {errorMessage}
             </div>
           )}
 
           {/* Pricing Breakdown */}
-          <div className="space-y-1 text-xs">
-            <div className="flex justify-between text-slate-600 font-medium">
+          <div className="space-y-0.5 text-xs">
+            <div className="flex justify-between text-slate-600 font-medium text-[11px]">
               <span>Subtotal</span>
               <span className="font-bold text-slate-900 font-mono">
                 {formatCurrency(subtotal, currency)}
@@ -638,7 +651,7 @@ export default function PosManualOrderView({
             </div>
 
             {orderType === "DELIVERY" && (
-              <div className="flex justify-between text-slate-600 font-medium">
+              <div className="flex justify-between text-slate-600 font-medium text-[11px]">
                 <span>Delivery Fee</span>
                 <span className="font-bold text-slate-900 font-mono">
                   {formatCurrency(deliveryFee, currency)}
@@ -646,7 +659,7 @@ export default function PosManualOrderView({
               </div>
             )}
 
-            <div className="flex justify-between items-baseline pt-1.5 border-t border-slate-200">
+            <div className="flex justify-between items-baseline pt-1 border-t border-slate-200">
               <span className="font-black text-xs uppercase tracking-wider text-slate-900">
                 TOTAL
               </span>
@@ -656,7 +669,7 @@ export default function PosManualOrderView({
             </div>
           </div>
 
-          {/* Primary Action Button: Create Order */}
+          {/* Large Create Order Action Button */}
           <button
             type="button"
             onClick={handleCreateOrder}

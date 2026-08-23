@@ -1,11 +1,11 @@
-﻿import { Device } from "@prisma/client";
+import { Device } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAdminSessionFromRequest } from "@/lib/auth";
 
 export const POS_DEVICE_COOKIE_NAME = "resto_pos_device";
 export const DEVICE_TYPES = ["POS", "KITCHEN", "ADMIN"] as const;
-export const DEVICE_STATUSES = ["ACTIVE", "INACTIVE", "REVOKED"] as const;
+export const DEVICE_STATUSES = ["ACTIVE", "INACTIVE", "DISABLED", "REVOKED"] as const;
 
 export type DeviceType = (typeof DEVICE_TYPES)[number];
 export type DeviceStatus = (typeof DEVICE_STATUSES)[number];
