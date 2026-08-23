@@ -2,9 +2,13 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Check, Clock3, Loader2, Lock, LogIn, RefreshCw, ShieldAlert, TabletSmartphone, X } from "lucide-react";
-import { Order } from "@/lib/types";
-import { formatCurrency, formatRelativeTime } from "@/lib/formatters";
+import { Loader2, Lock, LogIn, ShieldAlert, TabletSmartphone } from "lucide-react";
+import { Order, Category, Product, RestaurantSettings } from "@/lib/types";
+import PosHeader, { PosTab } from "@/components/pos/PosHeader";
+import PosRegisterView from "@/components/pos/PosRegisterView";
+import PosManualOrderView from "@/components/pos/PosManualOrderView";
+import PosHistoryView from "@/components/pos/PosHistoryView";
+import OrderDetailsModal from "@/components/OrderDetailsModal";
 
 type DeviceState = {
   device: { id: string; publicId: string; name: string; type: string; status: string } | null;
@@ -12,69 +16,116 @@ type DeviceState = {
   role: string | null;
 };
 
-const NEXT_ACTION: Record<string, { label: string; status: string; className: string }> = {
-  PENDING: { label: "Accept", status: "CONFIRMED", className: "bg-emerald-600 hover:bg-emerald-700 text-white" },
-  CONFIRMED: { label: "Preparing", status: "PREPARING", className: "bg-blue-600 hover:bg-blue-700 text-white" },
-  PREPARING: { label: "Ready", status: "READY", className: "bg-amber-500 hover:bg-amber-600 text-slate-950" },
-  READY: { label: "Completed", status: "COMPLETED", className: "bg-slate-900 hover:bg-black text-white" },
-};
-
-function statusTone(status: string) {
-  if (status === "PENDING") return "bg-red-600 text-white";
-  if (status === "CONFIRMED") return "bg-blue-600 text-white";
-  if (status === "PREPARING") return "bg-amber-500 text-slate-950";
-  if (status === "READY") return "bg-emerald-600 text-white";
-  return "bg-slate-700 text-white";
-}
-
 export default function PosPage() {
   const [deviceState, setDeviceState] = useState<DeviceState | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [settings, setSettings] = useState<RestaurantSettings | null>(null);
+
+  const [activeTab, setActiveTab] = useState<PosTab>("register");
   const [registrationCode, setRegistrationCode] = useState("");
   const [isRegistering, setIsRegistering] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
   const [message, setMessage] = useState("");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [selectedOrderForModal, setSelectedOrderForModal] = useState<Order | null>(null);
 
   const loadDevice = useCallback(async () => {
-    const res = await fetch("/api/pos/device", { cache: "no-store" });
-    const data = await res.json();
-    if (data.success) setDeviceState(data.data);
-    setIsLoading(false);
+    try {
+      const res = await fetch("/api/pos/device", { cache: "no-store" });
+      const data = await res.json();
+      if (data.success) setDeviceState(data.data);
+    } catch (err) {
+      console.error("Failed to load POS device state:", err);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
   const loadOrders = useCallback(async () => {
-    const res = await fetch("/api/pos/orders", { cache: "no-store" });
-    const data = await res.json();
-    if (data.success) setOrders(data.data || []);
+    try {
+      const res = await fetch("/api/pos/orders?scope=all", { cache: "no-store" });
+      const data = await res.json();
+      if (data.success) setOrders(data.data || []);
+    } catch (err) {
+      console.error("Failed to load POS orders:", err);
+    }
+  }, []);
+
+  const loadCatalog = useCallback(async () => {
+    try {
+      const [catRes, prodRes, setRes] = await Promise.all([
+        fetch("/api/categories"),
+        fetch("/api/products"),
+        fetch("/api/settings"),
+      ]);
+      const catData = await catRes.json();
+      const prodData = await prodRes.json();
+      const setData = await setRes.json();
+
+      if (catData.success && catData.data) setCategories(catData.data);
+      if (prodData.success && prodData.data) setProducts(prodData.data);
+      if (setData.success && setData.data) setSettings(setData.data);
+    } catch (err) {
+      console.error("Failed to load POS catalog data:", err);
+    }
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load remote POS data after mount
     loadDevice();
-  }, [loadDevice]);
+    loadCatalog();
+  }, [loadDevice, loadCatalog]);
 
+  // Realtime SSE Event Stream
   useEffect(() => {
     if (!deviceState?.device || !deviceState.staffAuthenticated) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load active orders on authentication
     loadOrders();
+
     const source = new EventSource("/api/pos/events");
-    const refresh = () => loadOrders();
-    source.addEventListener("order-created", refresh);
-    source.addEventListener("order-updated", refresh);
+
+    source.onopen = () => {
+      setIsConnected(true);
+    };
+
+    const handleRefresh = () => {
+      loadOrders();
+    };
+
+    source.addEventListener("order-created", handleRefresh);
+    source.addEventListener("order-updated", handleRefresh);
     source.addEventListener("device-revoked", () => {
-      setDeviceState((current) => current ? { ...current, device: null } : current);
+      setDeviceState((current) => (current ? { ...current, device: null } : current));
+      setIsConnected(false);
       source.close();
     });
+
     source.onerror = () => {
+      setIsConnected(false);
       source.close();
-      setTimeout(loadOrders, 2000);
+      // Retry connection after 3s
+      setTimeout(() => {
+        if (deviceState?.device && deviceState.staffAuthenticated) {
+          loadOrders();
+        }
+      }, 3000);
     };
-    return () => source.close();
+
+    return () => {
+      setIsConnected(false);
+      source.close();
+    };
   }, [deviceState?.device, deviceState?.staffAuthenticated, loadOrders]);
 
-  const grouped = useMemo(() => ({
-    PENDING: orders.filter((order) => order.status === "PENDING"),
-    ACTIVE: orders.filter((order) => ["CONFIRMED", "PREPARING", "READY"].includes(order.status)),
-  }), [orders]);
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    await Promise.all([loadOrders(), loadCatalog()]);
+    setIsRefreshing(false);
+  };
 
   const registerDevice = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -87,8 +138,9 @@ export default function PosPage() {
         body: JSON.stringify({ code: registrationCode }),
       });
       const data = await res.json();
-      if (!data.success) setMessage(data.error || "Registration failed.");
-      else {
+      if (!data.success) {
+        setMessage(data.error || "Registration failed.");
+      } else {
         setRegistrationCode("");
         setMessage("Device registered. Staff sign-in is still required for orders.");
         await loadDevice();
@@ -107,80 +159,207 @@ export default function PosPage() {
         body: JSON.stringify({ status }),
       });
       const data = await res.json();
-      if (data.success) await loadOrders();
-      else setMessage(data.error || "Could not update order.");
+      if (data.success) {
+        await loadOrders();
+      } else {
+        setMessage(data.error || "Could not update order.");
+      }
     } finally {
       setUpdatingId(null);
     }
   };
 
+  const handleOrderCreated = async (newOrderNumber: string) => {
+    setMessage(`Order #${newOrderNumber.replace(/^ORD-/, "")} placed successfully!`);
+    await loadOrders();
+    setActiveTab("register");
+    setTimeout(() => setMessage(""), 5000);
+  };
+
+  const handleModalStatusUpdated = (updatedOrder: Order) => {
+    setOrders((prev) => prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o)));
+    setSelectedOrderForModal(updatedOrder);
+  };
+
+  const pendingCount = useMemo(
+    () => orders.filter((o) => o.status === "PENDING").length,
+    [orders]
+  );
+  const activeCount = useMemo(
+    () => orders.filter((o) => ["CONFIRMED", "PREPARING", "READY"].includes(o.status)).length,
+    [orders]
+  );
+
+  const currency = settings?.currency || "MAD";
+  const deliveryFee = settings?.deliveryFee ?? 15;
+
   if (isLoading) {
-    return <div className="min-h-screen bg-slate-950 text-white grid place-items-center"><Loader2 className="w-10 h-10 animate-spin" /></div>;
+    return (
+      <div className="min-h-screen bg-slate-950 text-white grid place-items-center">
+        <div className="text-center space-y-3">
+          <Loader2 className="w-10 h-10 animate-spin mx-auto text-orange-500" />
+          <p className="text-sm font-bold text-slate-400">Connecting POS Terminal...</p>
+        </div>
+      </div>
+    );
   }
 
+  // Device registration required
   if (!deviceState?.device) {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6">
-        <form onSubmit={registerDevice} className="w-full max-w-lg bg-slate-900 border border-slate-700 rounded-2xl p-7 space-y-6">
+        <form
+          onSubmit={registerDevice}
+          className="w-full max-w-lg bg-slate-900 border border-slate-700 rounded-2xl p-7 sm:p-8 space-y-6 shadow-2xl"
+        >
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-xl bg-orange-500 flex items-center justify-center"><TabletSmartphone className="w-8 h-8" /></div>
-            <div><h1 className="text-2xl font-black">Register this device</h1><p className="text-sm text-slate-400">Enter the temporary code from Devices / POS.</p></div>
+            <div className="w-14 h-14 rounded-xl bg-orange-600 flex items-center justify-center text-white shrink-0">
+              <TabletSmartphone className="w-8 h-8" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-black tracking-tight">Register this device</h1>
+              <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
+                Enter the temporary code from Admin &gt; Devices / POS.
+              </p>
+            </div>
           </div>
-          <input value={registrationCode} onChange={(e) => setRegistrationCode(e.target.value.toUpperCase())} placeholder="DK-7F92-AB31" className="w-full text-center text-3xl tracking-widest font-black rounded-xl bg-white text-slate-950 p-5 uppercase" />
-          {message && <p className="text-sm text-amber-300">{message}</p>}
-          <button disabled={isRegistering} className="w-full h-16 rounded-xl bg-emerald-600 hover:bg-emerald-700 font-black text-lg flex items-center justify-center gap-3 disabled:opacity-50">
-            {isRegistering ? <Loader2 className="w-6 h-6 animate-spin" /> : <ShieldAlert className="w-6 h-6" />} Register Device
+
+          <input
+            value={registrationCode}
+            onChange={(e) => setRegistrationCode(e.target.value.toUpperCase())}
+            placeholder="DK-7F92-AB31"
+            className="w-full text-center text-2xl sm:text-3xl tracking-widest font-mono font-black rounded-xl bg-white text-slate-950 p-4 sm:p-5 uppercase focus:outline-none focus:ring-4 focus:ring-orange-500/30"
+          />
+
+          {message && (
+            <p className="text-xs sm:text-sm text-amber-300 font-bold bg-amber-950/50 p-3 rounded-xl border border-amber-800">
+              {message}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={isRegistering || !registrationCode.trim()}
+            className="w-full h-14 sm:h-16 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 font-black text-base sm:text-lg flex items-center justify-center gap-3 disabled:opacity-50 cursor-pointer shadow-md transition-all"
+          >
+            {isRegistering ? (
+              <Loader2 className="w-6 h-6 animate-spin" />
+            ) : (
+              <ShieldAlert className="w-6 h-6" />
+            )}
+            <span>Register POS Terminal</span>
           </button>
-          <Link href="/admin/login?redirect=/admin/pos" className="block text-center text-sm text-slate-300 hover:text-white">Staff sign in</Link>
+
+          <div className="pt-2 text-center">
+            <Link
+              href="/admin/login?redirect=/admin/pos"
+              className="text-xs sm:text-sm text-slate-400 hover:text-white underline font-medium"
+            >
+              Staff Sign In
+            </Link>
+          </div>
         </form>
       </div>
     );
   }
 
+  // Staff authentication required
   if (!deviceState.staffAuthenticated) {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6">
-        <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl p-7 text-center space-y-5">
-          <Lock className="w-12 h-12 mx-auto text-orange-400" />
-          <div><h1 className="text-2xl font-black">Staff sign-in required</h1><p className="text-sm text-slate-400 mt-2">{deviceState.device.name} is registered, but POS actions require an authorized staff session.</p></div>
-          <Link href="/admin/login?redirect=/admin/pos" className="h-14 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-black flex items-center justify-center gap-2"><LogIn className="w-5 h-5" /> Sign in</Link>
+        <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl p-8 text-center space-y-6 shadow-2xl">
+          <div className="w-16 h-16 rounded-2xl bg-orange-950/60 border border-orange-800 text-orange-400 flex items-center justify-center mx-auto">
+            <Lock className="w-8 h-8" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-black">Staff sign-in required</h1>
+            <p className="text-xs sm:text-sm text-slate-400 mt-2">
+              <strong className="text-white">{deviceState.device.name}</strong> is registered, but
+              taking register actions requires an authorized staff session.
+            </p>
+          </div>
+          <Link
+            href="/admin/login?redirect=/admin/pos"
+            className="h-14 rounded-xl bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white font-black text-base flex items-center justify-center gap-2 shadow-md transition-all"
+          >
+            <LogIn className="w-5 h-5" />
+            <span>Sign In to POS</span>
+          </Link>
         </div>
       </div>
     );
   }
 
-  const renderOrder = (order: Order) => {
-    const action = NEXT_ACTION[order.status];
-    return (
-      <article key={order.id} className="bg-white text-slate-950 rounded-xl border border-slate-200 shadow-sm p-5 flex flex-col gap-4">
-        <div className="flex items-start justify-between gap-4">
-          <div><h2 className="text-3xl font-black">#{order.orderNumber.replace(/^ORD-/, "")}</h2><p className="text-sm font-semibold text-slate-500">{formatRelativeTime(order.createdAt)} - {order.orderType}</p></div>
-          <span className={`px-4 py-2 rounded-full text-sm font-black ${statusTone(order.status)}`}>{order.status}</span>
-        </div>
-        <div className="space-y-2 text-lg font-bold">
-          {order.items.map((item) => <div key={item.id}><span>{item.quantity} x {item.productName}</span>{item.modifiers?.map((modifier) => <p key={modifier.id} className="ml-6 text-sm text-slate-500">+ {modifier.modifierOptionName}</p>)}</div>)}
-        </div>
-        {(order.allergies || order.notes) && <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm font-bold text-amber-900">{order.allergies && <p>Allergies: {order.allergies}</p>}{order.notes && <p>Note: {order.notes}</p>}</div>}
-        <div className="flex items-center justify-between border-t border-slate-200 pt-4"><span className="text-xl font-black">Total: {formatCurrency(order.total, "MAD")}</span></div>
-        <div className="grid grid-cols-2 gap-3">
-          {action && <button onClick={() => updateStatus(order, action.status)} disabled={updatingId === order.id} className={`h-16 rounded-xl text-lg font-black flex items-center justify-center gap-2 disabled:opacity-50 ${action.className}`}>{updatingId === order.id ? <Loader2 className="w-6 h-6 animate-spin" /> : <Check className="w-6 h-6" />} {action.label}</button>}
-          <button onClick={() => updateStatus(order, "CANCELLED")} disabled={updatingId === order.id} className="h-16 rounded-xl text-lg font-black bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 flex items-center justify-center gap-2"><X className="w-6 h-6" /> Reject</button>
-        </div>
-      </article>
-    );
-  };
-
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-950">
-      <header className="sticky top-0 z-20 bg-slate-950 text-white border-b border-slate-800 px-5 py-4 flex items-center justify-between">
-        <div><h1 className="text-2xl font-black">POS Register</h1><p className="text-sm text-slate-400">{deviceState.device.name} - {deviceState.device.publicId}</p></div>
-        <button onClick={loadOrders} className="h-12 px-5 rounded-xl bg-white/10 hover:bg-white/15 font-bold flex items-center gap-2"><RefreshCw className="w-5 h-5" /> Refresh</button>
-      </header>
-      {message && <div className="m-5 rounded-xl bg-amber-100 border border-amber-200 p-4 font-bold text-amber-900">{message}</div>}
-      <main className="p-5 grid grid-cols-1 xl:grid-cols-2 gap-5">
-        <section className="space-y-4"><div className="flex items-center justify-between"><h2 className="text-xl font-black">New Orders</h2><span className="rounded-full bg-red-600 text-white px-4 py-1 font-black">{grouped.PENDING.length}</span></div>{grouped.PENDING.length ? grouped.PENDING.map(renderOrder) : <div className="rounded-xl border-2 border-dashed border-slate-300 p-10 text-center text-slate-500 font-bold"><Clock3 className="w-10 h-10 mx-auto mb-2" />Waiting for new orders</div>}</section>
-        <section className="space-y-4"><div className="flex items-center justify-between"><h2 className="text-xl font-black">In Progress</h2><span className="rounded-full bg-slate-800 text-white px-4 py-1 font-black">{grouped.ACTIVE.length}</span></div>{grouped.ACTIVE.length ? grouped.ACTIVE.map(renderOrder) : <div className="rounded-xl border-2 border-dashed border-slate-300 p-10 text-center text-slate-500 font-bold">No active tickets</div>}</section>
+    <div className="min-h-screen bg-slate-100 text-slate-950 flex flex-col antialiased">
+      {/* 1. POS Top Header */}
+      <PosHeader
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        pendingCount={pendingCount}
+        activeCount={activeCount}
+        deviceName={deviceState.device.name}
+        devicePublicId={deviceState.device.publicId}
+        isConnected={isConnected}
+        onRefresh={handleManualRefresh}
+        isRefreshing={isRefreshing}
+      />
+
+      {/* 2. Global Feedback Banner */}
+      {message && (
+        <div className="mx-4 sm:mx-6 mt-4 rounded-xl bg-emerald-100 border border-emerald-300 p-3.5 font-bold text-xs sm:text-sm text-emerald-900 flex items-center justify-between shadow-xs">
+          <span>{message}</span>
+          <button
+            type="button"
+            onClick={() => setMessage("")}
+            className="text-xs text-emerald-800 hover:text-emerald-950 font-black cursor-pointer ml-4"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* 3. Main Views */}
+      <main className="flex-1 p-4 sm:p-6 max-w-[1600px] w-full mx-auto">
+        {activeTab === "register" && (
+          <PosRegisterView
+            orders={orders}
+            currency={currency}
+            updatingOrderId={updatingId}
+            onUpdateStatus={updateStatus}
+            onViewDetails={(order) => setSelectedOrderForModal(order)}
+          />
+        )}
+
+        {activeTab === "new-order" && (
+          <PosManualOrderView
+            categories={categories}
+            products={products}
+            currency={currency}
+            deliveryFee={deliveryFee}
+            onOrderCreated={handleOrderCreated}
+          />
+        )}
+
+        {activeTab === "history" && (
+          <PosHistoryView
+            orders={orders}
+            currency={currency}
+            onViewDetails={(order) => setSelectedOrderForModal(order)}
+          />
+        )}
       </main>
+
+      {/* 4. Full Order Details Modal */}
+      {selectedOrderForModal && (
+        <OrderDetailsModal
+          isOpen={Boolean(selectedOrderForModal)}
+          order={selectedOrderForModal}
+          currency={currency}
+          onClose={() => setSelectedOrderForModal(null)}
+          onStatusUpdated={handleModalStatusUpdated}
+        />
+      )}
     </div>
   );
 }
