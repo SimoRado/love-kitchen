@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { requireAdminAuth } from "@/lib/auth";
 import { roundMoney } from "@/lib/money";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);

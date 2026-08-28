@@ -100,25 +100,96 @@ export default function ProductModal({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Client-side format sanity check
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/avif",
+      "image/heic",
+      "image/heif",
+      "image/gif",
+    ];
+    if (!allowedTypes.includes(file.type.toLowerCase())) {
+      showToast("Only JPEG, PNG, WEBP, AVIF, HEIC, and GIF images are supported.", "error");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    // Client-side sanity check (up to 30 MB supported)
+    const MAX_SANITY_SIZE = 30 * 1024 * 1024;
+    if (file.size > MAX_SANITY_SIZE) {
+      showToast("Image size exceeds the 30 MB maximum limit.", "error");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
     try {
       setIsUploading(true);
-      const formData = new FormData();
-      formData.append("file", file);
 
-      const res = await fetch("/api/upload", {
+      // Step 1: Request a short-lived signed upload URL from the server
+      const signRes = await fetch("/api/upload/sign", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mimeType: file.type,
+          fileName: file.name,
+          fileSize: file.size,
+        }),
       });
-      const data = await res.json();
+      const signData = await signRes.json();
 
-      if (data.success && data.data?.url) {
-        setImage(data.data.url);
-        showToast("Image uploaded successfully", "success");
-      } else {
-        showToast(data.error || "Failed to upload image", "error");
+      let finalUrl = "";
+
+      if (signData.success && signData.data?.signedUrl && signData.data?.rawPath) {
+        // Step 2: Upload RAW file DIRECTLY to Supabase Storage using signed URL
+        // (Bypasses Vercel Serverless Function body entirely — 0 MB through Vercel)
+        const directUploadRes = await fetch(signData.data.signedUrl, {
+          method: "PUT",
+          headers: { "Content-Type": file.type },
+          body: file,
+        });
+
+        if (directUploadRes.ok) {
+          // Step 3: Notify server to optimize raw file (resize 1200x900, WebP q80) and delete raw original
+          const processRes = await fetch("/api/upload/process", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ rawPath: signData.data.rawPath }),
+          });
+          const processData = await processRes.json();
+
+          if (processData.success && processData.data?.url) {
+            finalUrl = processData.data.url;
+          } else {
+            throw new Error(processData.error || "Image optimization failed");
+          }
+        }
       }
-    } catch {
-      showToast("Network error while uploading image", "error");
+
+      // Step 4: Fallback to direct upload endpoint if signed upload was not used or failed
+      if (!finalUrl) {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const res = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
+        const data = await res.json();
+
+        if (data.success && data.data?.url) {
+          finalUrl = data.data.url;
+        } else {
+          throw new Error(data.error || "Failed to upload image");
+        }
+      }
+
+      setImage(finalUrl);
+      showToast("Image uploaded and optimized successfully", "success");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to upload image";
+      showToast(message, "error");
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) {
@@ -126,6 +197,8 @@ export default function ProductModal({
       }
     }
   };
+
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

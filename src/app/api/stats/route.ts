@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { requireAdminAuth } from "@/lib/auth";
 import { getCasablancaDayBounds } from "@/lib/openingHoursHelper";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
   const authError = await requireAdminAuth(request);
   if (authError) return authError;

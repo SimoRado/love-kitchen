@@ -7,6 +7,8 @@ import { publishOrderEvent } from "@/lib/orderEvents";
 import { printOrder } from "@/lib/printingService";
 import { calculateOrderPreparationEstimate } from "@/lib/prepTimeEstimator";
 
+export const dynamic = "force-dynamic";
+
 const ACTIVE_POS_STATUSES = ["PENDING", "CONFIRMED", "PREPARING", "READY"];
 const ALL_POS_STATUSES = ["PENDING", "CONFIRMED", "PREPARING", "READY", "COMPLETED", "CANCELLED"];
 const orderInclude = { items: { include: { modifiers: true } } } satisfies Prisma.OrderInclude;

@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdminAuth } from "@/lib/auth";
 import { roundMoney } from "@/lib/money";
-import { deleteUnusedProductBlob } from "@/lib/blob";
+import { deleteProductImage } from "@/lib/storage";
+
+export const dynamic = "force-dynamic";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -133,7 +135,7 @@ export async function PUT(
     });
 
     if (existingProduct.image && existingProduct.image !== updatedProduct.image) {
-      await deleteUnusedProductBlob(existingProduct.image);
+      await deleteProductImage(existingProduct.image);
     }
 
     return NextResponse.json({
@@ -174,7 +176,7 @@ export async function DELETE(
       where: { id },
     });
 
-    await deleteUnusedProductBlob(existingProduct.image);
+    await deleteProductImage(existingProduct.image);
 
     return NextResponse.json({
       success: true,

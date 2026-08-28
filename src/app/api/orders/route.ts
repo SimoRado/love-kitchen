@@ -7,6 +7,8 @@ import { calculateOrderTotals, roundMoney } from "@/lib/money";
 import { publishOrderEvent } from "@/lib/orderEvents";
 import { calculateOrderPreparationEstimate } from "@/lib/prepTimeEstimator";
 
+export const dynamic = "force-dynamic";
+
 const VALID_STATUSES = new Set([
   "PENDING",
   "CONFIRMED",

@@ -13,6 +13,8 @@ const DEFAULT_DAYS = [
   { dayOfWeek: 0, dayName: "Sunday", openTime: "12:00", closeTime: "23:00", isClosed: false },
 ];
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     let settings = await prisma.restaurantSettings.findUnique({
