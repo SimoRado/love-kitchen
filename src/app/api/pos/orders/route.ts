@@ -5,6 +5,7 @@ import { requirePosAccess } from "@/lib/deviceAuth";
 import { calculateOrderTotals, roundMoney } from "@/lib/money";
 import { publishOrderEvent } from "@/lib/orderEvents";
 import { printOrder } from "@/lib/printingService";
+import { calculateOrderPreparationEstimate } from "@/lib/prepTimeEstimator";
 
 const ACTIVE_POS_STATUSES = ["PENDING", "CONFIRMED", "PREPARING", "READY"];
 const ALL_POS_STATUSES = ["PENDING", "CONFIRMED", "PREPARING", "READY", "COMPLETED", "CANCELLED"];
@@ -172,6 +173,14 @@ export async function POST(request: NextRequest) {
         deliveryFeeSetting
       );
 
+      const prepEstimate = await calculateOrderPreparationEstimate(
+        items.map((it: { productId: string; quantity?: number }) => ({
+          productId: String(it.productId || ""),
+          quantity: Math.max(1, Math.floor(Number(it.quantity)) || 1),
+        })),
+        tx
+      );
+
       return tx.order.create({
         data: {
           orderNumber: generateOrderNumber(),
@@ -182,6 +191,8 @@ export async function POST(request: NextRequest) {
           status: targetStatus,
           allergies: allergies ? String(allergies).trim().slice(0, 500) : null,
           notes: notes ? String(notes).trim().slice(0, 1000) : null,
+          estimatedPrepMinutes: prepEstimate.estimatedPrepMinutes,
+          estimatedReadyAt: prepEstimate.estimatedReadyAt,
           ...totals,
           items: { create: createItems },
         },

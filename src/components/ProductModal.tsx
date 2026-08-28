@@ -31,6 +31,8 @@ export default function ProductModal({
   const [categoryId, setCategoryId] = useState("");
   const [image, setImage] = useState("");
   const [available, setAvailable] = useState(true);
+  const [prepTimeMinutes, setPrepTimeMinutes] = useState("15");
+  const [prepStation, setPrepStation] = useState("KITCHEN");
 
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -48,6 +50,8 @@ export default function ProductModal({
         setCategoryId(product.categoryId);
         setImage(product.image || "");
         setAvailable(product.available);
+        setPrepTimeMinutes(String(product.prepTimeMinutes ?? 15));
+        setPrepStation(product.prepStation || "KITCHEN");
       } else {
         setName("");
         setDescription("");
@@ -55,6 +59,8 @@ export default function ProductModal({
         setCategoryId(defaultCategoryId || (categories.length > 0 ? categories[0].id : ""));
         setImage("");
         setAvailable(true);
+        setPrepTimeMinutes("15");
+        setPrepStation("KITCHEN");
       }
       setErrors({});
     }
@@ -75,6 +81,11 @@ export default function ProductModal({
       newErrors.price = "Valid price is required.";
     } else if (numPrice < 0) {
       newErrors.price = "Price must be 0 or greater.";
+    }
+
+    const numPrepTime = parseInt(prepTimeMinutes, 10);
+    if (prepTimeMinutes.trim() === "" || isNaN(numPrepTime) || numPrepTime < 0) {
+      newErrors.prepTimeMinutes = "Preparation time must be 0 or greater.";
     }
 
     if (!categoryId) {
@@ -129,6 +140,8 @@ export default function ProductModal({
         categoryId,
         image: image.trim() || null,
         available,
+        prepTimeMinutes: parseInt(prepTimeMinutes, 10) || 0,
+        prepStation: prepStation.trim().toUpperCase() || "KITCHEN",
       };
 
       const url = isEdit ? `/api/products/${product?.id}` : "/api/products";
@@ -262,6 +275,63 @@ export default function ProductModal({
               {errors.price && (
                 <p className="text-xs text-red-500 mt-1">{errors.price}</p>
               )}
+            </div>
+          </div>
+
+          {/* Preparation Time & Kitchen Station */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Preparation Time */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-text-muted mb-1.5">
+                Preparation Time <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={prepTimeMinutes}
+                  onChange={(e) => setPrepTimeMinutes(e.target.value)}
+                  placeholder="15"
+                  className={`w-full px-3.5 py-2.5 rounded-lg border text-sm bg-surface transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 pr-16 ${
+                    errors.prepTimeMinutes
+                      ? "border-red-400 focus:border-red-500"
+                      : "border-border focus:border-primary"
+                  }`}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-text-muted pointer-events-none">
+                  minutes
+                </span>
+              </div>
+              <p className="text-[11px] text-text-muted mt-1">
+                Estimated time needed to prepare this item.
+              </p>
+              {errors.prepTimeMinutes && (
+                <p className="text-xs text-red-500 mt-1">{errors.prepTimeMinutes}</p>
+              )}
+            </div>
+
+            {/* Preparation Station */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-text-muted mb-1.5">
+                Preparation Station
+              </label>
+              <select
+                value={prepStation}
+                onChange={(e) => setPrepStation(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-lg border border-border text-sm bg-surface transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              >
+                <option value="BURGER">Burger Station</option>
+                <option value="PIZZA">Pizza Station</option>
+                <option value="SUSHI">Sushi Station</option>
+                <option value="SIDES">Sides & Starters</option>
+                <option value="DRINKS">Drinks & Bar</option>
+                <option value="DESSERT">Dessert Station</option>
+                <option value="KITCHEN">General Kitchen</option>
+              </select>
+              <p className="text-[11px] text-text-muted mt-1">
+                Kitchen area preparing this item concurrently.
+              </p>
             </div>
           </div>
 

@@ -44,6 +44,8 @@ export default function SettingsPage() {
   const [whatsappNumber, setWhatsappNumber] = useState("");
   const [currency, setCurrency] = useState("MAD");
   const [deliveryFee, setDeliveryFee] = useState("15");
+  const [congestionBufferMinutes, setCongestionBufferMinutes] = useState("5");
+  const [maxCongestionBufferMinutes, setMaxCongestionBufferMinutes] = useState("20");
   const [isOpenOverride, setIsOpenOverride] = useState<boolean | null>(null);
   const [isAutoHours, setIsAutoHours] = useState(true);
   const [openingHours, setOpeningHours] = useState<OpeningHour[]>([]);
@@ -63,6 +65,8 @@ export default function SettingsPage() {
         setWhatsappNumber(s.whatsappNumber || "");
         setCurrency(s.currency || "MAD");
         setDeliveryFee(s.deliveryFee !== undefined ? s.deliveryFee.toString() : "15");
+        setCongestionBufferMinutes(s.congestionBufferMinutes !== undefined ? s.congestionBufferMinutes.toString() : "5");
+        setMaxCongestionBufferMinutes(s.maxCongestionBufferMinutes !== undefined ? s.maxCongestionBufferMinutes.toString() : "20");
         setIsOpenOverride(s.isOpenOverride);
         setIsAutoHours(s.isAutoHours ?? true);
 
@@ -138,6 +142,8 @@ export default function SettingsPage() {
         whatsappNumber: whatsappNumber.trim() || null,
         currency: currency.trim() || "MAD",
         deliveryFee: parseFloat(deliveryFee) || 0,
+        congestionBufferMinutes: parseInt(congestionBufferMinutes, 10) || 5,
+        maxCongestionBufferMinutes: parseInt(maxCongestionBufferMinutes, 10) || 20,
         isOpenOverride,
         isAutoHours,
         openingHours,
@@ -371,7 +377,70 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* 2. Restaurant Operating Mode & Override */}
+      {/* 2. Kitchen Preparation Estimation */}
+      <div className="bg-surface rounded-xl border border-border p-6 shadow-xs space-y-5">
+        <div className="border-b border-border pb-4">
+          <h2 className="text-base font-bold text-text-main flex items-center gap-2">
+            <Clock className="w-4 h-4 text-primary" />
+            Kitchen Preparation Estimation
+          </h2>
+          <p className="text-xs text-text-muted mt-0.5">
+            Configure dynamic ready-time calculation and kitchen congestion buffers
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          {/* Buffer per Active Order */}
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-text-muted mb-1.5">
+              Congestion Buffer per Active Order
+            </label>
+            <div className="relative">
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={congestionBufferMinutes}
+                onChange={(e) => setCongestionBufferMinutes(e.target.value)}
+                placeholder="5"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-border text-sm bg-surface transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary pr-16"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-text-muted pointer-events-none">
+                minutes
+              </span>
+            </div>
+            <p className="text-[11px] text-text-muted mt-1">
+              Additional buffer added for each relevant active kitchen ticket (default 5 min).
+            </p>
+          </div>
+
+          {/* Maximum Congestion Cap */}
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-text-muted mb-1.5">
+              Maximum Congestion Buffer Cap
+            </label>
+            <div className="relative">
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={maxCongestionBufferMinutes}
+                onChange={(e) => setMaxCongestionBufferMinutes(e.target.value)}
+                placeholder="20"
+                className="w-full px-3.5 py-2.5 rounded-lg border border-border text-sm bg-surface transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary pr-16"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-text-muted pointer-events-none">
+                minutes
+              </span>
+            </div>
+            <p className="text-[11px] text-text-muted mt-1">
+              Maximum congestion delay allowed regardless of order volume (default 20 min).
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Restaurant Operating Mode & Override */}
       <div className="bg-surface rounded-xl border border-border p-6 shadow-xs space-y-5">
         <div className="border-b border-border pb-4">
           <h2 className="text-base font-bold text-text-main flex items-center gap-2">

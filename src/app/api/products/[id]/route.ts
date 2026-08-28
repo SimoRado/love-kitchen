@@ -48,7 +48,7 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { name, description, price, image, available, categoryId } = body;
+    const { name, description, price, image, available, categoryId, prepTimeMinutes, prepStation } = body;
 
     const existingProduct = await prisma.product.findUnique({
       where: { id },
@@ -75,6 +75,20 @@ export async function PUT(
         { status: 400 }
       );
     }
+
+    const parsedPrepTime = prepTimeMinutes !== undefined && prepTimeMinutes !== null
+      ? parseInt(String(prepTimeMinutes), 10)
+      : existingProduct.prepTimeMinutes;
+    if (isNaN(parsedPrepTime) || parsedPrepTime < 0) {
+      return NextResponse.json(
+        { success: false, error: "Preparation time must be a positive integer" },
+        { status: 400 }
+      );
+    }
+
+    const parsedStation = prepStation !== undefined
+      ? (typeof prepStation === "string" && prepStation.trim() ? prepStation.trim().toUpperCase() : "KITCHEN")
+      : existingProduct.prepStation;
 
     if (!categoryId || typeof categoryId !== "string") {
       return NextResponse.json(
@@ -109,6 +123,8 @@ export async function PUT(
         price: roundMoney(numericPrice),
         image: image !== undefined ? (image ? image.trim() : null) : existingProduct.image,
         available: available !== undefined ? Boolean(available) : existingProduct.available,
+        prepTimeMinutes: parsedPrepTime,
+        prepStation: parsedStation,
         categoryId,
       },
       include: {

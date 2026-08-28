@@ -130,16 +130,20 @@ export default function PosPage() {
 
     source.addEventListener("order-created", handleRefresh);
     source.addEventListener("order-updated", handleRefresh);
+    source.addEventListener("order-deleted", handleRefresh);
     source.addEventListener("device-revoked", () => {
       setDeviceState((current) => (current ? { ...current, device: null } : current));
       setIsConnected(false);
       source.close();
     });
 
+    let retryTimeout: ReturnType<typeof setTimeout> | null = null;
+
     source.onerror = () => {
       setIsConnected(false);
       source.close();
-      setTimeout(() => {
+      if (retryTimeout) clearTimeout(retryTimeout);
+      retryTimeout = setTimeout(() => {
         if (deviceState?.device && deviceState.staffAuthenticated) {
           loadOrders();
         }
@@ -147,6 +151,7 @@ export default function PosPage() {
     };
 
     return () => {
+      if (retryTimeout) clearTimeout(retryTimeout);
       setIsConnected(false);
       source.close();
     };

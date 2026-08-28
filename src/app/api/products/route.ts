@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { name, description, price, image, available, categoryId } = body;
+    const { name, description, price, image, available, categoryId, prepTimeMinutes, prepStation } = body;
 
     if (!name || typeof name !== "string" || name.trim() === "") {
       return NextResponse.json(
@@ -88,6 +88,20 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    const parsedPrepTime = prepTimeMinutes !== undefined && prepTimeMinutes !== null
+      ? parseInt(String(prepTimeMinutes), 10)
+      : 15;
+    if (isNaN(parsedPrepTime) || parsedPrepTime < 0) {
+      return NextResponse.json(
+        { success: false, error: "Preparation time must be a positive integer" },
+        { status: 400 }
+      );
+    }
+
+    const parsedStation = typeof prepStation === "string" && prepStation.trim()
+      ? prepStation.trim().toUpperCase()
+      : "KITCHEN";
 
     if (!categoryId || typeof categoryId !== "string") {
       return NextResponse.json(
@@ -122,6 +136,8 @@ export async function POST(request: NextRequest) {
         price: roundMoney(numericPrice),
         image: typeof image === "string" && image.trim() ? image.trim() : null,
         available: available !== undefined ? Boolean(available) : true,
+        prepTimeMinutes: parsedPrepTime,
+        prepStation: parsedStation,
         categoryId,
       },
       include: {

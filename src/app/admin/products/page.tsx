@@ -308,6 +308,7 @@ export default function ProductsPage() {
                 <tr>
                   <th className="py-3 px-5">Product</th>
                   <th className="py-3 px-5">Category</th>
+                  <th className="py-3 px-5">Prep Time</th>
                   <th className="py-3 px-5">Price</th>
                   <th className="py-3 px-5">Availability</th>
                   <th className="py-3 px-5">Last Updated</th>
@@ -360,6 +361,18 @@ export default function ProductsPage() {
                         <span className="inline-flex px-2.5 py-1 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
                           {product.category?.name || "Unassigned"}
                         </span>
+                      </td>
+
+                      {/* Prep Time & Station */}
+                      <td className="py-3.5 px-5">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-bold text-slate-900 text-xs">
+                            {product.prepTimeMinutes ?? 15} min
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">
+                            {product.prepStation || "KITCHEN"}
+                          </span>
+                        </div>
                       </td>
 
                       {/* Price */}

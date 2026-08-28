@@ -15,11 +15,12 @@ import {
   Loader2,
   CheckCircle2,
   AlertTriangle,
+  Clock,
 } from "lucide-react";
 import { useCartStore } from "@/store/useCartStore";
 import { RestaurantSettings } from "@/lib/types";
 import { checkRestaurantOpen, RestaurantOpenStatus } from "@/lib/openingHoursHelper";
-import { formatCurrency } from "@/lib/formatters";
+import { formatCurrency, formatTime } from "@/lib/formatters";
 import { calculateOrderTotals } from "@/lib/money";
 
 export default function CheckoutPage() {
@@ -40,6 +41,10 @@ export default function CheckoutPage() {
   const [settings, setSettings] = useState<RestaurantSettings | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [prepEstimate, setPrepEstimate] = useState<{
+    estimatedPrepMinutes: number;
+    estimatedReadyAt: string;
+  } | null>(null);
 
   // Form Fields
   const [name, setName] = useState(customerInfo.customerName || "");
@@ -95,6 +100,38 @@ export default function CheckoutPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- load authoritative checkout data after mount
     loadData();
   }, [loadData]);
+
+  // Dynamic kitchen preparation estimate preview
+  useEffect(() => {
+    if (items.length === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset estimate when cart is empty
+      setPrepEstimate(null);
+      return;
+    }
+
+    let isMounted = true;
+    fetch("/api/orders/estimate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        items: items.map((it) => ({
+          productId: it.product.id,
+          quantity: it.quantity,
+        })),
+      }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (isMounted && data.success && data.data) {
+          setPrepEstimate(data.data);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      isMounted = false;
+    };
+  }, [items]);
 
   const openStatus: RestaurantOpenStatus = checkRestaurantOpen(settings);
   const currency = settings?.currency || "MAD";
@@ -202,7 +239,11 @@ export default function CheckoutPage() {
             data.data.orderType
           )}&total=${encodeURIComponent(
             data.data.total
-          )}&currency=${encodeURIComponent(currency)}`
+          )}&currency=${encodeURIComponent(currency)}&estimatedReadyAt=${encodeURIComponent(
+            data.data.estimatedReadyAt || ""
+          )}&estimatedPrepMinutes=${encodeURIComponent(
+            data.data.estimatedPrepMinutes ? String(data.data.estimatedPrepMinutes) : ""
+          )}`
         );
       } else {
         setErrorMessage(
@@ -570,6 +611,24 @@ export default function CheckoutPage() {
                   );
                 })}
               </div>
+
+              {/* Dynamic Kitchen Preparation Estimate */}
+              {prepEstimate && (
+                <div className="bg-orange-50/70 border border-orange-200/80 rounded-xl p-3.5 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-bold text-orange-950">
+                      <Clock className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+                      <span>Prêt vers {formatTime(prepEstimate.estimatedReadyAt)}</span>
+                    </div>
+                    <span className="text-[11px] font-bold text-orange-800 bg-white px-2 py-0.5 rounded-md border border-orange-200 shadow-2xs font-mono">
+                      ~{prepEstimate.estimatedPrepMinutes} min
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 font-medium">
+                    Temps estimé — peut varier selon l&apos;activité en cuisine.
+                  </p>
+                </div>
+              )}
 
               {/* Pricing Breakdown */}
               <div className="pt-3 border-t border-slate-100 space-y-2 text-xs">

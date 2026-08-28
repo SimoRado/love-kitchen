@@ -11,10 +11,11 @@ import OrderStatusBadge from "@/components/OrderStatusBadge";
 import OrderDetailsModal from "@/components/OrderDetailsModal";
 import LoadingState from "@/components/LoadingState";
 import EmptyState from "@/components/EmptyState";
-import { Order, OrderStatus } from "@/lib/types";
+import { Order } from "@/lib/types";
 import {
   formatCurrency,
   formatRelativeTime,
+  formatTime,
   getOrderTypeConfig,
 } from "@/lib/formatters";
 import { useToast } from "@/components/ToastContext";
@@ -64,6 +65,40 @@ export default function OrdersPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- load remote admin data after mount
     fetchOrders();
+
+    let source: EventSource | null = null;
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const connectEvents = () => {
+      try {
+        source = new EventSource("/api/orders/events");
+
+        const handleRefresh = () => {
+          fetchOrders();
+        };
+
+        source.addEventListener("order-created", handleRefresh);
+        source.addEventListener("order-updated", handleRefresh);
+        source.addEventListener("order-deleted", handleRefresh);
+
+        source.onerror = () => {
+          source?.close();
+          reconnectTimeout = setTimeout(() => {
+            fetchOrders();
+            connectEvents();
+          }, 4000);
+        };
+      } catch (err) {
+        console.warn("Admin SSE connection error:", err);
+      }
+    };
+
+    connectEvents();
+
+    return () => {
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      source?.close();
+    };
   }, [fetchOrders]);
 
   const handleRefresh = () => {
@@ -116,31 +151,6 @@ export default function OrdersPage() {
       prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o))
     );
     setSelectedOrder(updatedOrder);
-  };
-
-  const handleQuickStatusChange = async (order: Order, newStatus: OrderStatus) => {
-    try {
-      const res = await fetch(`/api/orders/${order.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
-      });
-
-      const data = await res.json();
-      if (data.success && data.data) {
-        showToast(
-          `Order ${order.orderNumber} updated to ${newStatus}`,
-          "success"
-        );
-        setOrders((prev) =>
-          prev.map((o) => (o.id === order.id ? data.data : o))
-        );
-      } else {
-        showToast(data.error || "Could not update order status.", "error");
-      }
-    } catch {
-      showToast("Network error updating status", "error");
-    }
   };
 
   return (
@@ -269,6 +279,7 @@ export default function OrdersPage() {
                   <th className="py-3 px-5">Type</th>
                   <th className="py-3 px-5">Items Summary</th>
                   <th className="py-3 px-5">Total</th>
+                  <th className="py-3 px-5">Estimated Ready</th>
                   <th className="py-3 px-5">Status</th>
                   <th className="py-3 px-5 text-right">Actions</th>
                 </tr>
@@ -295,7 +306,7 @@ export default function OrdersPage() {
                     >
                       {/* Order Number */}
                       <td className="py-3.5 px-5 font-bold text-text-main">
-                        <span className="text-primary hover:underline">
+                        <span className="text-primary hover:underline font-mono">
                           {order.orderNumber}
                         </span>
                       </td>
@@ -347,11 +358,29 @@ export default function OrdersPage() {
                       </td>
 
                       {/* Total */}
-                      <td className="py-3.5 px-5 font-bold text-sm text-text-main">
+                      <td className="py-3.5 px-5 font-bold text-sm text-text-main font-mono">
                         {formatCurrency(order.total, "MAD")}
                       </td>
 
-                      {/* Status */}
+                      {/* Estimated Ready */}
+                      <td className="py-3.5 px-5 whitespace-nowrap">
+                        {order.estimatedReadyAt ? (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-mono font-bold text-slate-900 text-xs">
+                              {formatTime(order.estimatedReadyAt)}
+                            </span>
+                            {order.estimatedPrepMinutes && (
+                              <span className="text-[10px] text-slate-500 font-medium">
+                                ~{order.estimatedPrepMinutes} min
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 text-xs">—</span>
+                        )}
+                      </td>
+
+                      {/* Status (Read-Only Badge) */}
                       <td className="py-3.5 px-5">
                         <OrderStatusBadge status={order.status} size="sm" />
                       </td>
@@ -361,28 +390,10 @@ export default function OrdersPage() {
                         className="py-3.5 px-5 text-right"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <div className="flex items-center justify-end gap-2">
-                          <select
-                            value={order.status}
-                            onChange={(e) =>
-                              handleQuickStatusChange(
-                                order,
-                                e.target.value as OrderStatus
-                              )
-                            }
-                            className="text-[11px] font-semibold px-2 py-1 rounded-md border border-border bg-surface text-text-main focus:outline-none focus:ring-1 focus:ring-primary"
-                          >
-                            <option value="PENDING">PENDING</option>
-                            <option value="CONFIRMED">CONFIRMED</option>
-                            <option value="PREPARING">PREPARING</option>
-                            <option value="READY">READY</option>
-                            <option value="COMPLETED">COMPLETED</option>
-                            <option value="CANCELLED">CANCELLED</option>
-                          </select>
-
+                        <div className="flex items-center justify-end">
                           <button
                             onClick={() => setSelectedOrder(order)}
-                            className="p-1.5 rounded-lg border border-border text-text-muted hover:text-text-main hover:bg-surface-hover transition-colors"
+                            className="p-1.5 rounded-lg border border-border text-text-muted hover:text-text-main hover:bg-surface-hover transition-colors cursor-pointer"
                             title="View order details"
                           >
                             <Eye className="w-4 h-4" />

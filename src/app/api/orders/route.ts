@@ -5,6 +5,7 @@ import { requireAdminAuth } from "@/lib/auth";
 import { checkRestaurantOpen } from "@/lib/openingHoursHelper";
 import { calculateOrderTotals, roundMoney } from "@/lib/money";
 import { publishOrderEvent } from "@/lib/orderEvents";
+import { calculateOrderPreparationEstimate } from "@/lib/prepTimeEstimator";
 
 const VALID_STATUSES = new Set([
   "PENDING",
@@ -245,6 +246,15 @@ export async function POST(request: NextRequest) {
             orderType,
             Number(settings.deliveryFee)
           );
+
+          const prepEstimate = await calculateOrderPreparationEstimate(
+            rawItems.map((item, idx) => ({
+              productId: productIds[idx],
+              quantity: Number(item.quantity) || 1,
+            })),
+            tx
+          );
+
           return tx.order.create({
             data: {
               orderNumber: generateOrderNumber(),
@@ -256,6 +266,8 @@ export async function POST(request: NextRequest) {
               status: "PENDING",
               allergies,
               notes,
+              estimatedPrepMinutes: prepEstimate.estimatedPrepMinutes,
+              estimatedReadyAt: prepEstimate.estimatedReadyAt,
               ...totals,
               items: { create: createItems },
             },

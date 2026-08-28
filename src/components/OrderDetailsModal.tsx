@@ -18,6 +18,7 @@ import { Order, OrderStatus } from "@/lib/types";
 import {
   formatCurrency,
   formatDateTime,
+  formatTime,
   getOrderTypeConfig,
 } from "@/lib/formatters";
 import OrderStatusBadge from "./OrderStatusBadge";
@@ -219,6 +220,30 @@ export default function OrderDetailsModal({
               </select>
             </div>
           </div>
+
+          {/* Kitchen Preparation Estimate Card */}
+          {order.estimatedReadyAt && (
+            <div className="bg-orange-50/70 border border-orange-200 rounded-xl p-3.5 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-orange-600 text-white flex items-center justify-center font-bold">
+                  <Clock className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-orange-950">
+                    Estimated Ready Time
+                  </p>
+                  <p className="text-sm font-black text-orange-950 font-mono">
+                    Ready around {formatTime(order.estimatedReadyAt)}
+                  </p>
+                </div>
+              </div>
+              {order.estimatedPrepMinutes && (
+                <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-white border border-orange-200 text-orange-800 shadow-2xs font-mono">
+                  ~{order.estimatedPrepMinutes} min prep
+                </span>
+              )}
+            </div>
+          )}
 
           {/* Customer Information Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

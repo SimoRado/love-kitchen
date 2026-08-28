@@ -46,26 +46,28 @@ export default function PosRegisterView({
   const completedTodayCount = orders.filter((o) => o.status === "COMPLETED").length;
 
   return (
-    <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_310px] xl:grid-cols-[1fr_340px] 2xl:grid-cols-[1fr_380px] gap-2.5 sm:gap-3 h-full overflow-hidden items-stretch min-h-0">
-      {/* 1. LEFT MAIN AREA: 2-Column Ticket Queues */}
-      <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-3 h-full overflow-y-auto min-h-0 pr-1">
+    <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_290px] xl:grid-cols-[1fr_310px] 2xl:grid-cols-[1fr_340px] gap-2.5 sm:gap-3 h-full overflow-hidden items-stretch min-h-0">
+      {/* 1. LEFT MAIN AREA: 2-Column Independent Ticket Queues */}
+      <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3 h-full overflow-hidden min-h-0 pr-0.5">
         {/* Column 1: New Incoming Orders */}
-        <section className="space-y-3">
-          <div className="flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-3 shadow-xs sticky top-0 z-10">
+        <section className="flex flex-col h-full overflow-hidden min-h-0">
+          {/* Sticky Column Header */}
+          <div className="sticky top-0 z-10 shrink-0 bg-white rounded-xl border border-slate-200 p-2.5 shadow-xs flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse" />
-              <h2 className="text-base font-black text-slate-900 tracking-tight">
+              <h2 className="text-sm sm:text-base font-black text-slate-900 tracking-tight">
                 New Orders
               </h2>
             </div>
-            <span className="rounded-full bg-red-600 text-white px-3 py-0.5 text-xs font-black tracking-wider">
-              {pendingOrders.length} {pendingOrders.length === 1 ? "Order" : "Orders"}
+            <span className="rounded-full bg-red-600 text-white px-2.5 py-0.5 text-xs font-black tracking-wider font-mono">
+              {pendingOrders.length}
             </span>
           </div>
 
-          {pendingOrders.length > 0 ? (
-            <div className="space-y-3">
-              {pendingOrders.map((order) => (
+          {/* Scrollable Orders List */}
+          <div className="flex-1 overflow-y-auto min-h-0 space-y-2.5 pr-1 mt-2.5">
+            {pendingOrders.length > 0 ? (
+              pendingOrders.map((order) => (
                 <PosOrderCard
                   key={order.id}
                   order={order}
@@ -74,36 +76,38 @@ export default function PosRegisterView({
                   onUpdateStatus={onUpdateStatus}
                   onViewDetails={onViewDetails}
                 />
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-white/70 p-8 text-center text-slate-500">
-              <Clock3 className="w-10 h-10 mx-auto mb-2 text-slate-300" />
-              <p className="text-sm font-bold text-slate-700">Waiting for new orders</p>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Incoming orders from the website or register appear here instantly.
-              </p>
-            </div>
-          )}
+              ))
+            ) : (
+              <div className="rounded-xl border-2 border-dashed border-slate-200 bg-white/70 p-6 text-center text-slate-500 my-auto">
+                <Clock3 className="w-8 h-8 mx-auto mb-1.5 text-slate-300" />
+                <p className="text-xs font-bold text-slate-700">Waiting for new orders</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Incoming online or counter orders appear here.
+                </p>
+              </div>
+            )}
+          </div>
         </section>
 
         {/* Column 2: In Progress / Active Queue */}
-        <section className="space-y-3">
-          <div className="flex items-center justify-between bg-white rounded-2xl border border-slate-200 p-3 shadow-xs sticky top-0 z-10">
+        <section className="flex flex-col h-full overflow-hidden min-h-0">
+          {/* Sticky Column Header */}
+          <div className="sticky top-0 z-10 shrink-0 bg-white rounded-xl border border-slate-200 p-2.5 shadow-xs flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="w-2.5 h-2.5 rounded-full bg-blue-600" />
-              <h2 className="text-base font-black text-slate-900 tracking-tight">
+              <h2 className="text-sm sm:text-base font-black text-slate-900 tracking-tight">
                 In Progress
               </h2>
             </div>
-            <span className="rounded-full bg-slate-900 text-white px-3 py-0.5 text-xs font-black tracking-wider">
-              {activeOrders.length} {activeOrders.length === 1 ? "Ticket" : "Tickets"}
+            <span className="rounded-full bg-slate-900 text-white px-2.5 py-0.5 text-xs font-black tracking-wider font-mono">
+              {activeOrders.length}
             </span>
           </div>
 
-          {activeOrders.length > 0 ? (
-            <div className="space-y-3">
-              {activeOrders.map((order) => (
+          {/* Scrollable Orders List */}
+          <div className="flex-1 overflow-y-auto min-h-0 space-y-2.5 pr-1 mt-2.5">
+            {activeOrders.length > 0 ? (
+              activeOrders.map((order) => (
                 <PosOrderCard
                   key={order.id}
                   order={order}
@@ -112,17 +116,17 @@ export default function PosRegisterView({
                   onUpdateStatus={onUpdateStatus}
                   onViewDetails={onViewDetails}
                 />
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-white/70 p-8 text-center text-slate-500">
-              <Utensils className="w-10 h-10 mx-auto mb-2 text-slate-300" />
-              <p className="text-sm font-bold text-slate-700">No active tickets</p>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Accepted tickets being prepared in the kitchen will show up here.
-              </p>
-            </div>
-          )}
+              ))
+            ) : (
+              <div className="rounded-xl border-2 border-dashed border-slate-200 bg-white/70 p-6 text-center text-slate-500 my-auto">
+                <Utensils className="w-8 h-8 mx-auto mb-1.5 text-slate-300" />
+                <p className="text-xs font-bold text-slate-700">No active tickets</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Orders being prepared in the kitchen will show up here.
+                </p>
+              </div>
+            )}
+          </div>
         </section>
       </div>
 

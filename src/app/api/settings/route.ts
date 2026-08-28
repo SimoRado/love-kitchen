@@ -66,6 +66,8 @@ export async function GET() {
       deliveryFee: roundMoney(Number(settings.deliveryFee ?? 15)),
       isOpenOverride: settings.isOpenOverride,
       isAutoHours: Boolean(settings.isAutoHours),
+      congestionBufferMinutes: Number(settings.congestionBufferMinutes ?? 5),
+      maxCongestionBufferMinutes: Number(settings.maxCongestionBufferMinutes ?? 20),
       openingHours: settings.openingHours,
     };
 
@@ -99,6 +101,8 @@ export async function PUT(request: NextRequest) {
       deliveryFee,
       isOpenOverride,
       isAutoHours,
+      congestionBufferMinutes,
+      maxCongestionBufferMinutes,
       openingHours,
     } = body;
 
@@ -138,6 +142,17 @@ export async function PUT(request: NextRequest) {
     if (isAutoHours !== undefined && typeof isAutoHours !== "boolean") {
       return NextResponse.json({ success: false, error: "Automatic hours value is invalid." }, { status: 400 });
     }
+
+    const numericCongestionBuffer =
+      congestionBufferMinutes !== undefined && congestionBufferMinutes !== null
+        ? Math.max(0, parseInt(String(congestionBufferMinutes), 10) || 5)
+        : undefined;
+
+    const numericMaxCongestion =
+      maxCongestionBufferMinutes !== undefined && maxCongestionBufferMinutes !== null
+        ? Math.max(0, parseInt(String(maxCongestionBufferMinutes), 10) || 20)
+        : undefined;
+
     if (openingHours !== undefined) {
       if (!Array.isArray(openingHours) || openingHours.length > 7) {
         return NextResponse.json({ success: false, error: "Opening hours must contain at most seven days." }, { status: 400 });
@@ -211,6 +226,12 @@ export async function PUT(request: NextRequest) {
     const effectiveIsAutoHours =
       isAutoHours !== undefined ? Boolean(isAutoHours) : (existing?.isAutoHours ?? true);
 
+    const effectiveCongestionBuffer =
+      numericCongestionBuffer !== undefined ? numericCongestionBuffer : (existing?.congestionBufferMinutes ?? 5);
+
+    const effectiveMaxCongestion =
+      numericMaxCongestion !== undefined ? numericMaxCongestion : (existing?.maxCongestionBufferMinutes ?? 20);
+
     const { updated, updatedOpeningHours } = await prisma.$transaction(async (tx) => {
       const saved = await tx.restaurantSettings.upsert({
         where: { id: "default" },
@@ -220,6 +241,8 @@ export async function PUT(request: NextRequest) {
           googleMapsUrl: sanitizedGoogleMapsUrl, whatsappNumber: sanitizedWhatsappNumber,
           currency: effectiveCurrency, deliveryFee: numericDeliveryFee,
           isOpenOverride: effectiveIsOpenOverride, isAutoHours: effectiveIsAutoHours,
+          congestionBufferMinutes: effectiveCongestionBuffer,
+          maxCongestionBufferMinutes: effectiveMaxCongestion,
         },
         update: {
           name: effectiveName, subtitle: sanitizedSubtitle,
@@ -227,6 +250,8 @@ export async function PUT(request: NextRequest) {
           googleMapsUrl: sanitizedGoogleMapsUrl, whatsappNumber: sanitizedWhatsappNumber,
           currency: effectiveCurrency, deliveryFee: numericDeliveryFee,
           isOpenOverride: effectiveIsOpenOverride, isAutoHours: effectiveIsAutoHours,
+          congestionBufferMinutes: effectiveCongestionBuffer,
+          maxCongestionBufferMinutes: effectiveMaxCongestion,
         },
       });
 
@@ -273,6 +298,8 @@ export async function PUT(request: NextRequest) {
       deliveryFee: roundMoney(Number(updated.deliveryFee ?? 15)),
       isOpenOverride: updated.isOpenOverride,
       isAutoHours: Boolean(updated.isAutoHours),
+      congestionBufferMinutes: Number(updated.congestionBufferMinutes ?? 5),
+      maxCongestionBufferMinutes: Number(updated.maxCongestionBufferMinutes ?? 20),
       openingHours: updatedOpeningHours,
     };
 

@@ -44,6 +44,8 @@ export interface Product {
   price: number;
   image: string | null;
   available: boolean;
+  prepTimeMinutes?: number;
+  prepStation?: string | null;
   categoryId: string;
   category?: Category;
   modifierGroups?: ProductModifierGroup[];
@@ -94,6 +96,8 @@ export interface Order {
   total: number;
   allergies?: string | null;
   notes: string | null;
+  estimatedPrepMinutes?: number | null;
+  estimatedReadyAt?: string | Date | null;
   items: OrderItem[];
   createdAt: string | Date;
   updatedAt: string | Date;
@@ -121,6 +125,8 @@ export interface RestaurantSettings {
   deliveryFee: number;
   isOpenOverride: boolean | null;
   isAutoHours: boolean;
+  congestionBufferMinutes?: number;
+  maxCongestionBufferMinutes?: number;
   openingHours: OpeningHour[];
   createdAt: string | Date;
   updatedAt: string | Date;

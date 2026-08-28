@@ -4,7 +4,7 @@ import React, { Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CheckCircle2, ShoppingBag, Truck, ArrowLeft, Clock } from "lucide-react";
-import { formatCurrency } from "@/lib/formatters";
+import { formatCurrency, formatTime } from "@/lib/formatters";
 
 function OrderSuccessContent() {
   const searchParams = useSearchParams();
@@ -12,6 +12,8 @@ function OrderSuccessContent() {
   const orderType = searchParams.get("type") || "DELIVERY";
   const total = parseFloat(searchParams.get("total") || "0");
   const currency = searchParams.get("currency") || "MAD";
+  const estimatedReadyAt = searchParams.get("estimatedReadyAt");
+  const estimatedPrepMinutes = searchParams.get("estimatedPrepMinutes");
 
   return (
     <div className="min-h-screen bg-[#FFFDF9] flex flex-col justify-center items-center px-4 py-12">
@@ -25,14 +27,38 @@ function OrderSuccessContent() {
           Order Received!
         </h1>
         <p className="text-xs text-slate-500 font-normal mt-1.5 leading-relaxed">
-          Your order <strong className="text-slate-900 font-semibold">#{orderNumber}</strong> has been sent to the kitchen and is being prepared.
+          Your order <strong className="text-slate-900 font-semibold font-mono">#{orderNumber}</strong> has been sent to the kitchen and is being prepared.
         </p>
 
+        {/* Estimated Ready Time Card */}
+        {estimatedReadyAt && (
+          <div className="my-5 p-4 bg-orange-50/80 border border-orange-200 rounded-2xl flex items-center justify-between text-orange-950 text-left">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-orange-600 text-white flex items-center justify-center font-bold shrink-0 shadow-xs">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-orange-900">
+                  Prêt vers / Ready around
+                </p>
+                <p className="text-base font-black text-orange-950 font-mono">
+                  {formatTime(estimatedReadyAt)}
+                </p>
+              </div>
+            </div>
+            {estimatedPrepMinutes && (
+              <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-white border border-orange-200 text-orange-800 shadow-2xs font-mono">
+                ~{estimatedPrepMinutes} min
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Order Details Summary Box */}
-        <div className="my-6 p-4 rounded-2xl bg-slate-50 border border-slate-100 text-left space-y-2.5 text-xs">
+        <div className="my-5 p-4 rounded-2xl bg-slate-50 border border-slate-100 text-left space-y-2.5 text-xs">
           <div className="flex justify-between items-center text-slate-600">
             <span>Order Reference:</span>
-            <span className="font-semibold text-slate-900">{orderNumber}</span>
+            <span className="font-semibold text-slate-900 font-mono">{orderNumber}</span>
           </div>
 
           <div className="flex justify-between items-center text-slate-600">
@@ -54,16 +80,18 @@ function OrderSuccessContent() {
 
           <div className="flex justify-between items-center text-slate-600 pt-2 border-t border-slate-200">
             <span>Total Payable:</span>
-            <span className="font-semibold text-base text-primary">
+            <span className="font-semibold text-base text-primary font-mono">
               {formatCurrency(total, currency)}
             </span>
           </div>
         </div>
 
         {/* Preparation notice */}
-        <div className="p-3 bg-orange-50/70 border border-orange-100 rounded-xl flex items-center gap-2.5 text-orange-950 text-xs mb-6 text-left">
-          <Clock className="w-4 h-4 text-primary shrink-0" />
-          <span className="font-normal">Our chefs are preparing your meal fresh. Pay upon delivery/pickup.</span>
+        <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center gap-2.5 text-slate-700 text-xs mb-6 text-left">
+          <Clock className="w-4 h-4 text-slate-400 shrink-0" />
+          <span className="font-normal text-[11px]">
+            Our chefs are preparing your meal fresh. Pay upon delivery/pickup.
+          </span>
         </div>
 
         {/* Action Button */}
