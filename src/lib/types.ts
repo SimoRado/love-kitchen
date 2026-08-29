@@ -190,5 +190,4 @@ export interface DeviceRegistrationCode {
   replaceDeviceId?: string | null;
   deviceName: string;
   deviceType: DeviceType;
-  qrPayload?: string;
 }

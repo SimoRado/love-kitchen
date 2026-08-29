@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await createSignedProductUploadUrl(mimeType, fileName);
+    const result = await createSignedProductUploadUrl(mimeType, fileName, fileSize);
 
     return NextResponse.json({
       success: true,

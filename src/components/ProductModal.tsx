@@ -34,7 +34,8 @@ export default function ProductModal({
   const [prepTimeMinutes, setPrepTimeMinutes] = useState("15");
   const [prepStation, setPrepStation] = useState("KITCHEN");
 
-  const [isUploading, setIsUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<"idle" | "uploading" | "optimizing">("idle");
+  const isUploading = uploadStatus !== "idle";
   const [isSaving, setIsSaving] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
@@ -63,6 +64,7 @@ export default function ProductModal({
         setPrepStation("KITCHEN");
       }
       setErrors({});
+      setUploadStatus("idle");
     }
   }, [isOpen, product, categories, defaultCategoryId]);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -125,9 +127,9 @@ export default function ProductModal({
     }
 
     try {
-      setIsUploading(true);
+      // Stage 1: Request short-lived signed upload URL (Admin Auth Required)
+      setUploadStatus("uploading");
 
-      // Step 1: Request a short-lived signed upload URL from the server
       const signRes = await fetch("/api/upload/sign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -137,61 +139,74 @@ export default function ProductModal({
           fileSize: file.size,
         }),
       });
+
       const signData = await signRes.json();
+      if (!signRes.ok || !signData.success || !signData.data?.signedUrl || !signData.data?.rawPath) {
+        throw new Error(signData.error || "Failed to generate signed upload URL");
+      }
 
-      let finalUrl = "";
+      const { signedUrl, rawPath } = signData.data;
 
-      if (signData.success && signData.data?.signedUrl && signData.data?.rawPath) {
-        // Step 2: Upload RAW file DIRECTLY to Supabase Storage using signed URL
-        // (Bypasses Vercel Serverless Function body entirely — 0 MB through Vercel)
-        const directUploadRes = await fetch(signData.data.signedUrl, {
+      // Stage 2: Upload RAW file DIRECTLY to storage (bypasses Vercel serverless request body)
+      let directUploadRes: Response;
+      if (signedUrl.includes("/api/upload/raw")) {
+        // Local development direct raw upload
+        directUploadRes = await fetch(signedUrl, {
           method: "PUT",
           headers: { "Content-Type": file.type },
           body: file,
         });
+      } else {
+        // Direct Supabase Storage signed upload (multipart FormData format)
+        const storageFormData = new FormData();
+        storageFormData.append("cacheControl", "3600");
+        storageFormData.append("", file);
 
-        if (directUploadRes.ok) {
-          // Step 3: Notify server to optimize raw file (resize 1200x900, WebP q80) and delete raw original
-          const processRes = await fetch("/api/upload/process", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ rawPath: signData.data.rawPath }),
-          });
-          const processData = await processRes.json();
-
-          if (processData.success && processData.data?.url) {
-            finalUrl = processData.data.url;
-          } else {
-            throw new Error(processData.error || "Image optimization failed");
-          }
-        }
-      }
-
-      // Step 4: Fallback to direct upload endpoint if signed upload was not used or failed
-      if (!finalUrl) {
-        const formData = new FormData();
-        formData.append("file", file);
-
-        const res = await fetch("/api/upload", {
-          method: "POST",
-          body: formData,
+        directUploadRes = await fetch(signedUrl, {
+          method: "PUT",
+          headers: { "x-upsert": "true" },
+          body: storageFormData,
         });
-        const data = await res.json();
 
-        if (data.success && data.data?.url) {
-          finalUrl = data.data.url;
-        } else {
-          throw new Error(data.error || "Failed to upload image");
+        // Fallback to binary body if storage endpoint expects raw bytes
+        if (!directUploadRes.ok && directUploadRes.status !== 401 && directUploadRes.status !== 403) {
+          directUploadRes = await fetch(signedUrl, {
+            method: "PUT",
+            headers: {
+              "Content-Type": file.type,
+              "x-upsert": "true",
+            },
+            body: file,
+          });
         }
       }
 
-      setImage(finalUrl);
-      showToast("Image uploaded and optimized successfully", "success");
+      if (!directUploadRes.ok) {
+        throw new Error(`Direct storage upload failed (HTTP ${directUploadRes.status}). Please try again.`);
+      }
+
+      // Stage 3: Request server-side Sharp optimization (auto EXIF rotate + 1200x750 WebP q80)
+      setUploadStatus("optimizing");
+
+      const processRes = await fetch("/api/upload/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rawPath }),
+      });
+
+      const processData = await processRes.json();
+      if (!processRes.ok || !processData.success || !processData.data?.url) {
+        throw new Error(processData.error || "Server-side image optimization failed");
+      }
+
+      setImage(processData.data.url);
+      showToast("Photo uploaded and optimized to WebP successfully", "success");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to upload image";
+      console.error("Image pipeline error:", err);
+      const message = err instanceof Error ? err.message : "Failed to upload and process photo";
       showToast(message, "error");
     } finally {
-      setIsUploading(false);
+      setUploadStatus("idle");
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -454,7 +469,13 @@ export default function ProductModal({
                   ) : (
                     <Upload className="w-4 h-4 text-text-muted" />
                   )}
-                  <span>{isUploading ? "Uploading..." : "Upload"}</span>
+                  <span>
+                    {uploadStatus === "uploading"
+                      ? "Uploading photo..."
+                      : uploadStatus === "optimizing"
+                      ? "Optimizing photo..."
+                      : "Upload"}
+                  </span>
                 </button>
               </div>
 

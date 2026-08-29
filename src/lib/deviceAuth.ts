@@ -101,7 +101,7 @@ export async function getCurrentStaffRole(request: NextRequest): Promise<string 
 }
 
 export async function requirePosAccess(request: NextRequest): Promise<{ device: Device; role: string } | NextResponse> {
-  const [device, role] = await Promise.all([
+  const [device, adminRole] = await Promise.all([
     getDeviceFromRequest(request),
     getCurrentStaffRole(request),
   ]);
@@ -110,16 +110,15 @@ export async function requirePosAccess(request: NextRequest): Promise<{ device: 
     return NextResponse.json({ success: false, error: "Registered active POS device required." }, { status: 403 });
   }
 
-  if (!role || !POS_ALLOWED_ADMIN_ROLES.has(role)) {
-    return NextResponse.json({ success: false, error: "Staff sign-in with POS permissions required." }, { status: 401 });
-  }
+  // Role is "ADMIN" if an authenticated admin is operating, otherwise "POS"
+  const role = adminRole && POS_ALLOWED_ADMIN_ROLES.has(adminRole) ? adminRole : "POS";
 
   return { device, role };
 }
 
 export async function requireDeviceManagementAccess(request: NextRequest): Promise<NextResponse | null> {
-  const role = await getCurrentStaffRole(request);
-  if (!role || !DEVICE_MANAGEMENT_ROLES.has(role)) {
+  const isAdmin = await getAdminSessionFromRequest(request);
+  if (!isAdmin) {
     return NextResponse.json({ success: false, error: "Owner/admin access required." }, { status: 403 });
   }
   return null;

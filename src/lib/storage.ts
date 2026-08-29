@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import sharp from "sharp";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { put, del } from "@vercel/blob";
@@ -5,7 +7,7 @@ import { prisma } from "./prisma";
 
 export const SANITY_MAX_RAW_SIZE = 30 * 1024 * 1024; // 30 MB sanity cap
 export const TARGET_WIDTH = 1200;
-export const TARGET_HEIGHT = 900; // 4:3 aspect ratio matching product card design
+export const TARGET_HEIGHT = 750; // 16:10 (~1.6:1) aspect ratio matching product card presentation
 export const WEBP_QUALITY = 80;
 
 export const ALLOWED_IMAGE_TYPES: Record<string, string> = {
@@ -114,17 +116,30 @@ export function getSupabaseStorageClient(): SupabaseClient | null {
   return null;
 }
 
+const LOCAL_STORAGE_DIR = path.join(process.cwd(), "public", "uploads");
+
+function ensureLocalDir(dirPath: string) {
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true });
+  }
+}
+
 /**
  * Creates a short-lived signed upload URL for a raw image file.
  * Browser will upload the raw file directly to this URL, bypassing Vercel function body.
  */
 export async function createSignedProductUploadUrl(
   mimeType: string,
-  fileName?: string
+  fileName?: string,
+  fileSize?: number
 ): Promise<{ signedUrl: string; token: string; rawPath: string }> {
   const extension = getExtensionFromMime(mimeType);
   if (!extension) {
     throw new Error("Only JPEG, PNG, WEBP, AVIF, HEIC, and GIF images are supported.");
+  }
+
+  if (fileSize !== undefined && typeof fileSize === "number" && fileSize > SANITY_MAX_RAW_SIZE) {
+    throw new Error("Image size exceeds the 30 MB maximum limit.");
   }
 
   const rawUuid = crypto.randomUUID();
@@ -136,32 +151,40 @@ export async function createSignedProductUploadUrl(
       .from("product-images")
       .createSignedUploadUrl(rawPath, { upsert: true });
 
-
-    if (error || !data) {
-      console.warn("Supabase createSignedUploadUrl note:", error?.message);
-    } else {
+    if (!error && data?.signedUrl) {
       return {
         signedUrl: data.signedUrl,
-        token: data.token,
+        token: data.token || "",
         rawPath,
       };
     }
+    console.warn("Supabase createSignedUploadUrl error:", error?.message);
   }
 
-  // Direct public bucket fallback URL if service key not configured
-  const projectUrl = getSupabaseProjectUrl();
-  const directUploadUrl = `${projectUrl}/storage/v1/object/product-images/${rawPath}`;
+  // Development-only direct upload URL when cloud storage credentials are not provided
   return {
-    signedUrl: directUploadUrl,
-    token: "",
+    signedUrl: `/api/upload/raw?path=${encodeURIComponent(rawPath)}`,
+    token: "local-dev-token",
     rawPath,
   };
 }
 
 /**
+ * Saves a raw uploaded file in local development storage.
+ */
+export async function saveLocalRawFile(rawPath: string, buffer: Buffer): Promise<void> {
+  if (!rawPath || typeof rawPath !== "string" || !rawPath.startsWith("raw/") || rawPath.includes("..")) {
+    throw new Error("Invalid raw storage path");
+  }
+  const fullPath = path.join(LOCAL_STORAGE_DIR, rawPath);
+  ensureLocalDir(path.dirname(fullPath));
+  fs.writeFileSync(fullPath, buffer);
+}
+
+/**
  * Downloads the raw file from storage, validates magic bytes,
- * resizes to 1200x900 (4:3), converts to WebP (q80),
- * uploads to final path products/<uuid>.webp, and deletes the raw file.
+ * resizes to 1200x750 (16:10), converts to WebP (q80),
+ * uploads to final path products/<uuid>.webp, verifies existence, and deletes the raw file.
  */
 export async function processRawProductImage(
   rawPath: string
@@ -184,12 +207,11 @@ export async function processRawProductImage(
       }
     }
 
+    // 2. Local development fallback
     if (!rawBuffer) {
-      // Fallback: fetch via public object URL
-      const publicRawUrl = `${projectUrl}/storage/v1/object/public/product-images/${rawPath}`;
-      const res = await fetch(publicRawUrl);
-      if (res.ok) {
-        rawBuffer = Buffer.from(await res.arrayBuffer());
+      const localRawFile = path.join(LOCAL_STORAGE_DIR, rawPath);
+      if (fs.existsSync(localRawFile)) {
+        rawBuffer = fs.readFileSync(localRawFile);
       }
     }
 
@@ -197,32 +219,38 @@ export async function processRawProductImage(
       throw new Error("Raw image file was not found in storage. Please try uploading again.");
     }
 
-    // 2. Sanity size check (<= 30 MB)
+    // 3. Sanity size check (<= 30 MB)
     if (rawBuffer.length > SANITY_MAX_RAW_SIZE) {
       throw new Error("Uploaded file exceeds the maximum allowed size of 30 MB.");
     }
 
-    // 3. Validate magic signature bytes
+    // 4. Validate magic signature bytes
     const signatureCheck = matchesImageSignature(new Uint8Array(rawBuffer.slice(0, 32)));
     if (!signatureCheck.valid) {
       throw new Error("This doesn't look like a valid image file. Please provide a genuine JPEG, PNG, WEBP, HEIC, or GIF image.");
     }
 
-    // 4. Sharp image processing: EXIF rotate + Resize to 1200x900 (4:3) + WebP conversion (q80)
-    const optimizedBuffer = await sharp(rawBuffer)
-      .rotate() // Auto-orient based on EXIF
-      .resize(TARGET_WIDTH, TARGET_HEIGHT, {
-        fit: "cover",
-        position: "centre",
-      })
-      .webp({ quality: WEBP_QUALITY })
-      .toBuffer();
+    // 5. Sharp image processing: EXIF rotate + Resize to 1200x750 (16:10) + WebP conversion (q80)
+    let optimizedBuffer: Buffer;
+    try {
+      optimizedBuffer = await sharp(rawBuffer)
+        .rotate() // Auto-orient based on EXIF
+        .resize(TARGET_WIDTH, TARGET_HEIGHT, {
+          fit: "cover",
+          position: "centre",
+        })
+        .webp({ quality: WEBP_QUALITY })
+        .toBuffer();
+    } catch (sharpError) {
+      console.error("Sharp processing failed:", sharpError);
+      throw new Error("Failed to process image format with Sharp. Please provide a valid JPEG, PNG, or WEBP image.");
+    }
 
     const optimizedUuid = crypto.randomUUID();
     const finalStoragePath = `products/${optimizedUuid}.webp`;
 
-    // 5. Upload optimized WebP to final product-images path
-    let uploadSuccess = false;
+    // 6. Upload optimized WebP to final product-images path
+    let finalUrl = "";
     if (supabase) {
       const { error: optUploadError } = await supabase.storage
         .from("product-images")
@@ -232,36 +260,38 @@ export async function processRawProductImage(
           cacheControl: "31536000",
         });
 
-      if (!optUploadError) {
-        uploadSuccess = true;
+      if (optUploadError) {
+        throw new Error(`Failed to upload optimized image to Supabase Storage: ${optUploadError.message}`);
       }
+
+      finalUrl = `${projectUrl}/storage/v1/object/public/product-images/${finalStoragePath}`;
+    } else if (process.env.BLOB_READ_WRITE_TOKEN) {
+      const blob = await put(finalStoragePath, optimizedBuffer, {
+        access: "public",
+        addRandomSuffix: false,
+        contentType: "image/webp",
+      });
+      if (!blob?.url) {
+        throw new Error("Failed to upload optimized image to Vercel Blob.");
+      }
+      finalUrl = blob.url;
+    } else {
+      // Local development storage
+      const localFinalPath = path.join(LOCAL_STORAGE_DIR, finalStoragePath);
+      ensureLocalDir(path.dirname(localFinalPath));
+      fs.writeFileSync(localFinalPath, optimizedBuffer);
+      finalUrl = `/uploads/${finalStoragePath}`;
     }
 
-    if (!uploadSuccess && process.env.BLOB_READ_WRITE_TOKEN) {
-      try {
-        const blob = await put(finalStoragePath, optimizedBuffer, {
-          access: "public",
-          addRandomSuffix: false,
-          contentType: "image/webp",
-        });
-        if (blob?.url) {
-          uploadSuccess = true;
-        }
-      } catch (e) {
-        console.warn("Vercel Blob upload note:", e);
-      }
-    }
-
-    // 6. Delete the raw original file from Supabase Storage
+    // 7. Delete the raw original file from Storage only after successful upload
     await deleteRawStorageFile(rawPath);
 
-    const finalUrl = `${projectUrl}/storage/v1/object/public/product-images/${finalStoragePath}`;
     return {
       url: finalUrl,
       filename: finalStoragePath,
     };
   } catch (error) {
-    // Always attempt to delete raw file on error so no orphaned files remain
+    // Attempt to delete raw file on error to avoid orphan temp files
     await deleteRawStorageFile(rawPath);
     throw error;
   }
@@ -273,6 +303,10 @@ async function deleteRawStorageFile(rawPath: string): Promise<void> {
     if (supabase) {
       await supabase.storage.from("product-images").remove([rawPath]);
     }
+    const localRawFile = path.join(LOCAL_STORAGE_DIR, rawPath);
+    if (fs.existsSync(localRawFile)) {
+      fs.unlinkSync(localRawFile);
+    }
   } catch (err) {
     console.warn("Raw storage cleanup note:", err);
   }
@@ -280,6 +314,7 @@ async function deleteRawStorageFile(rawPath: string): Promise<void> {
 
 /**
  * Direct file upload fallback (processes file with sharp into WebP and uploads).
+ * @deprecated Use createSignedProductUploadUrl -> direct storage -> processRawProductImage pipeline.
  */
 export async function uploadProductImage(
   file: File,
@@ -331,6 +366,7 @@ export async function uploadProductImage(
         filename: storagePath,
       };
     }
+    throw new Error(`Supabase upload failed: ${error.message}`);
   }
 
   if (process.env.BLOB_READ_WRITE_TOKEN) {
@@ -345,9 +381,12 @@ export async function uploadProductImage(
     };
   }
 
-  const projectUrl = getSupabaseProjectUrl();
+  // Local development storage
+  const localFinalPath = path.join(LOCAL_STORAGE_DIR, storagePath);
+  ensureLocalDir(path.dirname(localFinalPath));
+  fs.writeFileSync(localFinalPath, optimizedBuffer);
   return {
-    url: `${projectUrl}/storage/v1/object/public/product-images/${storagePath}`,
+    url: `/uploads/${storagePath}`,
     filename: storagePath,
   };
 }
@@ -376,8 +415,18 @@ export async function deleteProductImage(url: string | null | undefined): Promis
           await supabase.storage.from("product-images").remove([storagePath]);
         }
       }
+      return;
+    }
+
+    if (url.startsWith("/uploads/products/") || url.includes("/uploads/products/")) {
+      const relativePart = url.startsWith("/uploads/") ? url.replace("/uploads/", "") : url;
+      const localFile = path.join(LOCAL_STORAGE_DIR, relativePart);
+      if (fs.existsSync(localFile)) {
+        fs.unlinkSync(localFile);
+      }
     }
   } catch (error) {
     console.warn("Product image cleanup note:", error);
   }
 }
+

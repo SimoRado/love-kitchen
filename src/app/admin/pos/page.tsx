@@ -1,19 +1,16 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Loader2,
-  Lock,
-  LogIn,
   ShieldAlert,
   TabletSmartphone,
-  QrCode,
-  Camera,
   CheckCircle2,
-  X,
   AlertCircle,
   Keyboard,
+  Power,
+  ShieldOff,
+  RefreshCw,
 } from "lucide-react";
 import { Order, Category, Product, RestaurantSettings } from "@/lib/types";
 import type { PosTab } from "@/components/pos/PosHeader";
@@ -24,8 +21,7 @@ import OrderDetailsModal from "@/components/OrderDetailsModal";
 
 type DeviceState = {
   device: { id: string; publicId: string; name: string; type: string; status: string } | null;
-  staffAuthenticated: boolean;
-  role: string | null;
+  isRegistered: boolean;
 };
 
 export default function PosPage() {
@@ -45,12 +41,6 @@ export default function PosPage() {
   const [message, setMessage] = useState("");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [selectedOrderForModal, setSelectedOrderForModal] = useState<Order | null>(null);
-
-  // QR Scanner modal state
-  const [isScanning, setIsScanning] = useState(false);
-  const [scanError, setScanError] = useState<string | null>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
 
   const loadDevice = useCallback(async () => {
     try {
@@ -99,22 +89,9 @@ export default function PosPage() {
     loadCatalog();
   }, [loadDevice, loadCatalog]);
 
-  // Check URL parameters for QR scan code auto-fill
-  /* eslint-disable react-hooks/set-state-in-effect -- sync registration code from QR URL parameter */
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const codeFromUrl = params.get("code") || params.get("pairingCode");
-      if (codeFromUrl && !deviceState?.device) {
-        setRegistrationCode(codeFromUrl.toUpperCase());
-      }
-    }
-  }, [deviceState?.device]);
-  /* eslint-enable react-hooks/set-state-in-effect */
-
   // Realtime SSE Event Stream
   useEffect(() => {
-    if (!deviceState?.device || !deviceState.staffAuthenticated) return;
+    if (!deviceState?.device || deviceState.device.status !== "ACTIVE") return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- load active orders on authentication
     loadOrders();
 
@@ -132,7 +109,7 @@ export default function PosPage() {
     source.addEventListener("order-updated", handleRefresh);
     source.addEventListener("order-deleted", handleRefresh);
     source.addEventListener("device-revoked", () => {
-      setDeviceState((current) => (current ? { ...current, device: null } : current));
+      loadDevice();
       setIsConnected(false);
       source.close();
     });
@@ -144,7 +121,7 @@ export default function PosPage() {
       source.close();
       if (retryTimeout) clearTimeout(retryTimeout);
       retryTimeout = setTimeout(() => {
-        if (deviceState?.device && deviceState.staffAuthenticated) {
+        if (deviceState?.device && deviceState.device.status === "ACTIVE") {
           loadOrders();
         }
       }, 3000);
@@ -155,11 +132,11 @@ export default function PosPage() {
       setIsConnected(false);
       source.close();
     };
-  }, [deviceState?.device, deviceState?.staffAuthenticated, loadOrders]);
+  }, [deviceState?.device, loadOrders, loadDevice]);
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
-    await Promise.all([loadOrders(), loadCatalog()]);
+    await Promise.all([loadOrders(), loadCatalog(), loadDevice()]);
     setIsRefreshing(false);
   };
 
@@ -176,18 +153,17 @@ export default function PosPage() {
       });
       const data = await res.json();
       if (!data.success) {
-        setMessage(data.error || "Pairing failed. Please check the code or generate a new invitation.");
+        setMessage(data.error || "Pairing failed. Please check the code or ask an admin for a new code.");
       } else {
         const pairedName = data.data?.device?.name || "Restaurant iPad";
         setJustPairedDeviceName(pairedName);
         setRegistrationCode("");
-        stopQrScanner();
 
-        // Brief pleasant success transition
+        // Pleasant success transition
         setTimeout(async () => {
           await loadDevice();
           setJustPairedDeviceName(null);
-        }, 1500);
+        }, 1200);
       }
     } catch {
       setMessage("Connection error during pairing. Please verify network.");
@@ -200,86 +176,6 @@ export default function PosPage() {
     event.preventDefault();
     await handleRegisterWithCode(registrationCode);
   };
-
-  // QR Scanner Implementation
-  const stopQrScanner = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-    setIsScanning(false);
-    setScanError(null);
-  }, []);
-
-  const startQrScanner = async () => {
-    setIsScanning(true);
-    setScanError(null);
-
-    try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setScanError("Camera access is not supported on this browser. Please enter the manual pairing code.");
-        return;
-      }
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-      });
-      streamRef.current = stream;
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-
-      // Check if native BarcodeDetector is available
-      const BarcodeDetectorClass = typeof window !== "undefined"
-        ? (window as unknown as {
-            BarcodeDetector?: new (options: { formats: string[] }) => {
-              detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue?: string }>>;
-            };
-          }).BarcodeDetector
-        : undefined;
-
-      if (BarcodeDetectorClass) {
-        const detector = new BarcodeDetectorClass({ formats: ["qr_code"] });
-        const scanInterval = setInterval(async () => {
-          if (!videoRef.current || !streamRef.current) {
-            clearInterval(scanInterval);
-            return;
-          }
-          try {
-            const barcodes = await detector.detect(videoRef.current);
-            if (barcodes && barcodes.length > 0) {
-              const rawVal = barcodes[0].rawValue || "";
-              let extractedCode = rawVal;
-              try {
-                if (rawVal.includes("code=")) {
-                  const urlObj = new URL(rawVal, window.location.origin);
-                  extractedCode = urlObj.searchParams.get("code") || rawVal;
-                }
-              } catch {}
-
-              if (extractedCode) {
-                clearInterval(scanInterval);
-                stopQrScanner();
-                setRegistrationCode(extractedCode.toUpperCase());
-                handleRegisterWithCode(extractedCode);
-              }
-            }
-          } catch {}
-        }, 400);
-      }
-    } catch (err) {
-      console.warn("Camera scan init failed:", err);
-      setScanError("Could not access camera. Please grant camera permission or use the manual code.");
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      stopQrScanner();
-    };
-  }, [stopQrScanner]);
 
   const updateStatus = async (order: Order, status: string) => {
     setUpdatingId(order.id);
@@ -344,67 +240,103 @@ export default function PosPage() {
             <CheckCircle2 className="w-10 h-10 stroke-[2.5]" />
           </div>
           <div>
-            <h1 className="text-2xl font-black text-white">✓ POS Successfully Registered</h1>
+            <h1 className="text-2xl font-black text-white">✓ POS Registered</h1>
             <p className="text-sm font-bold text-emerald-400 mt-1">
-              Device: <span className="text-white">{justPairedDeviceName}</span>
+              Terminal: <span className="text-white">{justPairedDeviceName}</span>
             </p>
           </div>
           <div className="pt-2 flex items-center justify-center gap-2 text-slate-400 text-xs font-bold">
             <Loader2 className="w-4 h-4 animate-spin text-orange-500" />
-            <span>Opening register...</span>
+            <span>Opening POS register...</span>
           </div>
         </div>
       </div>
     );
   }
 
-  // UNREGISTERED IPAD DEDICATED EXPERIENCE
-  if (!deviceState?.device) {
+  // DISABLED TERMINAL STATE
+  if (deviceState?.device && deviceState.device.status === "DISABLED") {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6 antialiased">
+        <div className="w-full max-w-md bg-slate-900 border border-amber-500/40 rounded-3xl p-8 sm:p-10 text-center space-y-6 shadow-2xl">
+          <div className="w-16 h-16 rounded-2xl bg-amber-950/60 border border-amber-800 text-amber-400 flex items-center justify-center mx-auto">
+            <Power className="w-8 h-8" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-2xl font-black text-white">POS Terminal Disabled</h1>
+            <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
+              <strong className="text-white">{deviceState.device.name}</strong> ({deviceState.device.publicId}) has been temporarily disabled by an administrator. Please contact your manager to reactivate this device.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleManualRefresh}
+            className="w-full h-12 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-white font-extrabold text-sm flex items-center justify-center gap-2 cursor-pointer transition-colors"
+          >
+            <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin text-orange-400" : ""}`} />
+            <span>Check Status</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // REVOKED TERMINAL STATE
+  if (deviceState?.device && deviceState.device.status === "REVOKED") {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6 antialiased">
+        <div className="w-full max-w-md bg-slate-900 border border-rose-500/40 rounded-3xl p-8 sm:p-10 text-center space-y-6 shadow-2xl">
+          <div className="w-16 h-16 rounded-2xl bg-rose-950/60 border border-rose-800 text-rose-400 flex items-center justify-center mx-auto">
+            <ShieldOff className="w-8 h-8" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-2xl font-black text-white">Registration Revoked</h1>
+            <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
+              This device registration has been revoked or replaced by an administrator. To pair this iPad again, request a new registration code from the admin dashboard.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDeviceState(null)}
+            className="w-full h-12 rounded-xl bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white font-extrabold text-sm flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-md"
+          >
+            <Keyboard className="w-4 h-4" />
+            <span>Enter New Registration Code</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // UNREGISTERED TERMINAL CODE ENTRY SCREEN
+  if (!deviceState?.device || deviceState.device.status !== "ACTIVE") {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-center items-center p-6 antialiased">
-        <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-7 sm:p-9 space-y-6 shadow-2xl">
+        <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-7 sm:p-9 space-y-6 shadow-2xl">
           {/* Header Brand */}
           <div className="text-center space-y-2">
             <div className="w-14 h-14 rounded-2xl bg-orange-600 flex items-center justify-center text-white mx-auto shadow-lg shadow-orange-600/30">
               <TabletSmartphone className="w-7 h-7" />
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white uppercase font-mono">
-              Dark Kitchen POS
+              Register this POS
             </h1>
-            <p className="text-sm font-bold text-slate-400">
-              This device is not registered. Pair this device with the restaurant&apos;s POS system.
+            <p className="text-xs sm:text-sm font-medium text-slate-400">
+              Enter the temporary registration code provided by your administrator.
             </p>
           </div>
 
-          {/* Option 1: Fast QR Code Scan */}
-          <div className="pt-2">
-            <button
-              type="button"
-              onClick={startQrScanner}
-              className="w-full h-14 rounded-2xl bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white font-extrabold text-base flex items-center justify-center gap-3 cursor-pointer shadow-lg shadow-orange-600/20 transition-all active:scale-[0.98]"
-            >
-              <Camera className="w-5 h-5" />
-              <span>Scan QR Code</span>
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3 text-slate-600">
-            <div className="flex-1 h-px bg-slate-800" />
-            <span className="text-xs font-black uppercase tracking-widest text-slate-500">OR</span>
-            <div className="flex-1 h-px bg-slate-800" />
-          </div>
-
-          {/* Option 2: Manual Code Entry */}
-          <form onSubmit={registerDevice} className="space-y-4">
+          {/* Registration Form */}
+          <form onSubmit={registerDevice} className="space-y-4 pt-1">
             <div>
               <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-2 text-center">
-                Enter pairing code:
+                Pairing Code:
               </label>
               <input
                 type="text"
                 value={registrationCode}
                 onChange={(e) => setRegistrationCode(e.target.value.toUpperCase())}
-                placeholder="DK-7F4K-29XP"
+                placeholder="AB-CDEF-GHJK"
                 autoFocus
                 className="w-full text-center text-2xl sm:text-3xl tracking-widest font-mono font-black rounded-2xl bg-white text-slate-950 p-4 uppercase focus:outline-none focus:ring-4 focus:ring-orange-500/30 placeholder:text-slate-300 shadow-inner"
               />
@@ -420,12 +352,12 @@ export default function PosPage() {
             <button
               type="submit"
               disabled={isRegistering || !registrationCode.trim()}
-              className="w-full h-13 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 disabled:opacity-40 text-white font-black text-sm sm:text-base flex items-center justify-center gap-2.5 cursor-pointer transition-all active:scale-[0.98]"
+              className="w-full h-14 rounded-2xl bg-orange-600 hover:bg-orange-700 active:bg-orange-800 disabled:opacity-40 text-white font-black text-base flex items-center justify-center gap-2.5 cursor-pointer transition-all active:scale-[0.98] shadow-lg shadow-orange-600/20"
             >
               {isRegistering ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>Verifying Pairing Code...</span>
+                  <span>Registering Device...</span>
                 </>
               ) : (
                 <>
@@ -436,95 +368,9 @@ export default function PosPage() {
             </button>
           </form>
 
-          {/* Footer Admin Shortcut */}
-          <div className="pt-2 text-center border-t border-slate-800/80">
-            <p className="text-xs text-slate-500">
-              Need a code? Generate one from the{" "}
-              <Link
-                href="/admin/devices"
-                className="text-orange-400 hover:text-orange-300 font-bold underline"
-              >
-                Admin Devices Dashboard
-              </Link>
-            </p>
-          </div>
-        </div>
-
-        {/* QR SCANNER CAMERA MODAL OVERLAY */}
-        {isScanning && (
-          <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-4">
-            <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-2xl relative">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <div className="flex items-center gap-2 text-white">
-                  <QrCode className="w-5 h-5 text-orange-500" />
-                  <h3 className="font-black text-base">Scan POS Pairing QR Code</h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={stopQrScanner}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Video Camera Viewport */}
-              <div className="relative aspect-square w-full bg-black rounded-2xl overflow-hidden border-2 border-orange-500/50 flex items-center justify-center">
-                <video
-                  ref={videoRef}
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute inset-8 border-2 border-dashed border-orange-400/80 rounded-xl pointer-events-none animate-pulse" />
-              </div>
-
-              {scanError ? (
-                <div className="p-3 bg-rose-950/60 border border-rose-800 text-rose-300 text-xs font-bold rounded-xl">
-                  {scanError}
-                </div>
-              ) : (
-                <p className="text-xs text-center text-slate-400 font-medium">
-                  Point the camera directly at the QR Code shown on the Admin Dashboard.
-                </p>
-              )}
-
-              <button
-                type="button"
-                onClick={stopQrScanner}
-                className="w-full h-11 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs cursor-pointer"
-              >
-                Close & Enter Code Manually
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // Staff authentication required
-  if (!deviceState.staffAuthenticated) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-6 antialiased">
-        <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center space-y-6 shadow-2xl">
-          <div className="w-16 h-16 rounded-2xl bg-orange-950/60 border border-orange-800 text-orange-400 flex items-center justify-center mx-auto">
-            <Lock className="w-8 h-8" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-black text-white">Staff sign-in required</h1>
-            <p className="text-xs sm:text-sm text-slate-400 mt-2 leading-relaxed">
-              <strong className="text-white">{deviceState.device.name}</strong> ({deviceState.device.publicId}) is registered, but
-              accessing register actions requires an authorized staff session.
-            </p>
-          </div>
-          <Link
-            href="/admin/login?redirect=/admin/pos"
-            className="h-14 rounded-xl bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white font-black text-base flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer"
-          >
-            <LogIn className="w-5 h-5" />
-            <span>Sign In to POS</span>
-          </Link>
+          <p className="text-[11px] text-center text-slate-500">
+            Registration codes are temporary (10 min) and single-use.
+          </p>
         </div>
       </div>
     );

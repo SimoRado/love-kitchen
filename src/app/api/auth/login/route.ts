@@ -4,9 +4,22 @@ import {
   createAdminSessionToken,
   ADMIN_COOKIE_NAME,
 } from "@/lib/auth";
+import { getDeviceFromRequest } from "@/lib/deviceAuth";
 
 export async function POST(request: NextRequest) {
   try {
+    // Isolate POS terminals: Cashier terminals cannot authenticate as administrators
+    const existingDevice = await getDeviceFromRequest(request);
+    if (existingDevice && existingDevice.status === "ACTIVE") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Admin login is disabled on registered POS terminals.",
+        },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
     const { password } = body;
 

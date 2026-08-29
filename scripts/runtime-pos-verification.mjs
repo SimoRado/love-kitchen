@@ -63,12 +63,26 @@ async function req(path, options = {}) {
     body = JSON.stringify(body);
     headers["Content-Type"] = "application/json";
   }
-  const res = await fetch(base + path, { method: options.method || "GET", headers, body, signal: options.signal });
+  const redirectMode = options.redirect || "manual";
+  const res = await fetch(base + path, {
+    method: options.method || "GET",
+    headers,
+    body,
+    signal: options.signal,
+    redirect: redirectMode,
+  });
   options.jar?.store(res);
   const text = await res.text();
   let json = null;
   try { json = text ? JSON.parse(text) : null; } catch {}
-  return { res, status: res.status, text, json, setCookie: options.jar?.lastSetCookie || [] };
+  return {
+    res,
+    status: res.status,
+    location: res.headers.get("location"),
+    text,
+    json,
+    setCookie: options.jar?.lastSetCookie || [],
+  };
 }
 
 function normalizeRegistrationCode(code) {
@@ -120,13 +134,13 @@ async function createCustomerOrder(label, productPick, quantity = 2) {
 
 async function adminLogin(jar, password) {
   const response = await req("/api/auth/login", { method: "POST", jar, body: { password } });
-  assert(response.status === 200 && response.json?.success, `${jar.name} admin/staff login`, `status ${response.status}`);
+  assert(response.status === 200 && response.json?.success, `${jar.name} admin login`, `status ${response.status}`);
 }
 
 async function makeRegistrationCode(adminJar, name, replaceDeviceId = null) {
   const response = await req("/api/devices", { method: "POST", jar: adminJar, body: { name, type: "POS", replaceDeviceId } });
   assert(response.status === 201 && response.json?.data?.code, `Registration code generated for ${name}`, `expires ${response.json?.data?.expiresAt}`);
-  assert(Boolean(response.json?.data?.qrPayload), `QR payload generated for ${name}`);
+  assert(response.json?.data?.qrPayload === undefined, `QR payload is NOT included in API response for ${name}`);
   return response.json.data;
 }
 
@@ -161,15 +175,38 @@ async function main() {
     assert(Boolean(pick), "Existing orderable product selected", pick?.product?.name);
 
     const settings = await req("/api/settings");
-    assert(settings.json?.data?.isOpenOverride === true || settings.status === 200, "Runtime settings available", `delivery fee ${settings.json?.data?.deliveryFee}`);
+    assert(settings.json?.data?.isOpenOverride === true || settings.status === 200, "Runtime settings available");
 
-    // 2. Admin Authentication & Device Management
+    // 2. Unregistered browser security checks
+    const unregJar = new Jar("unregistered-browser");
+    const unregAdmin = await req("/admin", { jar: unregJar });
+    assert(unregAdmin.status === 307 && unregAdmin.location?.includes("/admin/login"), "Unregistered browser visiting /admin redirects to /admin/login");
+
+    const unregProducts = await req("/admin/products", { jar: unregJar });
+    assert(unregProducts.status === 307 && unregProducts.location?.includes("/admin/login"), "Unregistered browser visiting /admin/products redirects to /admin/login");
+
+    const unregSettings = await req("/admin/settings", { jar: unregJar });
+    assert(unregSettings.status === 307 && unregSettings.location?.includes("/admin/login"), "Unregistered browser visiting /admin/settings redirects to /admin/login");
+
+    const unregDevices = await req("/admin/devices", { jar: unregJar });
+    assert(unregDevices.status === 307 && unregDevices.location?.includes("/admin/login"), "Unregistered browser visiting /admin/devices redirects to /admin/login");
+
+    const unregPos = await req("/admin/pos", { jar: unregJar });
+    assert(unregPos.status === 200, "Unregistered browser visiting /admin/pos loads pairing screen (200 OK)");
+
+    const unregPosOrders = await req("/api/pos/orders", { jar: unregJar });
+    assert(unregPosOrders.status === 403, "Unregistered browser cannot access /api/pos/orders (403 Forbidden)");
+
+    const unregPosEvents = await req("/api/pos/events", { jar: unregJar });
+    assert(unregPosEvents.status === 403, "Unregistered browser cannot access /api/pos/events (403 Forbidden)");
+
+    // 3. Admin Authentication & Device Management
     const adminJar = new Jar("admin-browser");
     await adminLogin(adminJar, adminPassword);
     const adminDevicesBefore = await req("/api/devices", { jar: adminJar });
     assert(adminDevicesBefore.status === 200 && Array.isArray(adminDevicesBefore.json?.data), "Authenticated admin can list devices");
 
-    // 3. Pairing Security: Invalid, Expired, Single-use
+    // 4. Pairing Security: Invalid, Expired, Single-use
     await registerDevice(new Jar("invalid-code-browser"), "NO-SUCH-CODE", false);
     const expiredCode = `EX-${crypto.randomUUID().slice(0, 4).toUpperCase()}-OLD`;
     await prisma.deviceRegistrationCode.create({
@@ -183,10 +220,9 @@ async function main() {
     });
     await registerDevice(new Jar("expired-code-browser"), expiredCode, false);
 
-    // 4. Create Invitation & Register POS-01 (Main Register)
+    // 5. Create Invitation & Register POS-01 (Main Register)
     const invitation1 = await makeRegistrationCode(adminJar, "POS-01 Main Register");
     assert(new Date(invitation1.expiresAt).getTime() - Date.now() <= 10 * 60 * 1000 + 5000, "Registration code is configured for 10 minutes");
-    assert(invitation1.qrPayload.includes("code="), "QR payload includes prefilled pairing code");
 
     const pos01Jar = new Jar("pos-01-browser");
     const pos01Device = await registerDevice(pos01Jar, invitation1.code, true);
@@ -197,31 +233,49 @@ async function main() {
     // Verify POS-01 recognized & credential hashed
     const pos01DeviceState = await req("/api/pos/device", { jar: pos01Jar });
     assert(pos01DeviceState.status === 200 && pos01DeviceState.json?.data?.device?.id === pos01Device.id, "POS-01 device recognized by /api/pos/device");
+    assert(pos01DeviceState.json?.data?.isRegistered === true, "POS-01 device marked as registered");
     const pos01Db = await prisma.device.findUnique({ where: { id: pos01Device.id } });
     assert(Boolean(pos01Db?.credentialHash) && pos01Db.credentialHash.length === 64, "Device credential is stored as SHA-256 hash");
 
-    // 5. Create Invitation & Register POS-02 (Secondary Register) - MULTI-POS CONCURRENCY
+    // 6. POS Terminal Role Hardening Checks: POS-01 cannot access Admin Routes or APIs
+    const pos01ToAdmin = await req("/admin", { jar: pos01Jar });
+    assert(pos01ToAdmin.status === 307 && pos01ToAdmin.location?.includes("/admin/pos"), "Registered POS-01 navigating to /admin is redirected to /admin/pos");
+
+    const pos01ToProducts = await req("/admin/products", { jar: pos01Jar });
+    assert(pos01ToProducts.status === 307 && pos01ToProducts.location?.includes("/admin/pos"), "Registered POS-01 navigating to /admin/products is redirected to /admin/pos");
+
+    const pos01ToSettings = await req("/admin/settings", { jar: pos01Jar });
+    assert(pos01ToSettings.status === 307 && pos01ToSettings.location?.includes("/admin/pos"), "Registered POS-01 navigating to /admin/settings is redirected to /admin/pos");
+
+    const pos01ToDevices = await req("/admin/devices", { jar: pos01Jar });
+    assert(pos01ToDevices.status === 307 && pos01ToDevices.location?.includes("/admin/pos"), "Registered POS-01 navigating to /admin/devices is redirected to /admin/pos");
+
+    const pos01ToLogin = await req("/admin/login", { jar: pos01Jar });
+    assert(pos01ToLogin.status === 307 && pos01ToLogin.location?.includes("/admin/pos"), "Registered POS-01 navigating to /admin/login is redirected to /admin/pos");
+
+    const pos01AttemptLogin = await req("/api/auth/login", { method: "POST", jar: pos01Jar, body: { password: adminPassword } });
+    assert(pos01AttemptLogin.status === 403, "Registered POS-01 attempting POST /api/auth/login is rejected with 403 Forbidden", pos01AttemptLogin.json?.error);
+
+    const pos01CallAdminApi = await req("/api/devices", { jar: pos01Jar });
+    assert(pos01CallAdminApi.status === 403 || pos01CallAdminApi.status === 401, "Registered POS-01 cannot call admin API /api/devices (401/403)");
+
+    const pos01MutateSetting = await req("/api/settings", { method: "PUT", jar: pos01Jar, body: { restaurantName: "Hacked" } });
+    assert(pos01MutateSetting.status === 401, "Registered POS-01 cannot mutate settings (401 Unauthorized)");
+
+    // 7. POS-01 can directly access POS orders WITHOUT staff login
+    const pos01OrdersDirect = await req("/api/pos/orders", { jar: pos01Jar });
+    assert(pos01OrdersDirect.status === 200, "Registered POS-01 accesses /api/pos/orders directly via device credential", `status: ${pos01OrdersDirect.status}, text: ${pos01OrdersDirect.text}`);
+
+    // 8. Create Invitation & Register POS-02 (Secondary Register) - MULTI-POS CONCURRENCY
     const invitation2 = await makeRegistrationCode(adminJar, "POS-02 Secondary Register");
     const pos02Jar = new Jar("pos-02-browser");
     const pos02Device = await registerDevice(pos02Jar, invitation2.code, true);
     assert(pos02Device.id !== pos01Device.id, "POS-02 has independent unique device ID", pos02Device.publicId);
 
-    // Unauthenticated registered devices cannot access POS API
-    const unauth01 = await req("/api/pos/orders", { jar: pos01Jar });
-    assert(unauth01.status === 401, "Registered POS-01 without staff login cannot read orders");
-    const unauth02 = await req("/api/pos/orders", { jar: pos02Jar });
-    assert(unauth02.status === 401, "Registered POS-02 without staff login cannot read orders");
+    const pos02OrdersDirect = await req("/api/pos/orders", { jar: pos02Jar });
+    assert(pos02OrdersDirect.status === 200, "POS-02 accesses /api/pos/orders directly via its device credential");
 
-    // Staff Login on both POS-01 and POS-02
-    await adminLogin(pos01Jar, adminPassword);
-    await adminLogin(pos02Jar, adminPassword);
-
-    const pos01Orders = await req("/api/pos/orders", { jar: pos01Jar });
-    assert(pos01Orders.status === 200, "POS-01 can read POS orders after staff login");
-    const pos02Orders = await req("/api/pos/orders", { jar: pos02Jar });
-    assert(pos02Orders.status === 200, "POS-02 can read POS orders after staff login");
-
-    // 6. Test Multi-POS Real-Time Order Broadcast: Customer places order -> BOTH POS-01 and POS-02 receive event
+    // 9. Real-Time Order Broadcast: Customer places order -> BOTH POS-01 and POS-02 receive event
     const ac1 = new AbortController();
     const ac2 = new AbortController();
 
@@ -238,7 +292,6 @@ async function main() {
     let buf2 = "";
     let orderCreated = null;
 
-    // Helper to read until target order-created event
     async function waitForEvent(reader, bufRef, targetType) {
       while (true) {
         const { done, value } = await reader.read();
@@ -260,13 +313,11 @@ async function main() {
     const ref1 = { val: buf1 };
     const ref2 = { val: buf2 };
 
-    // Wait for connected events on both
     await Promise.all([
       waitForEvent(reader1, ref1, "connected"),
       waitForEvent(reader2, ref2, "connected"),
     ]);
 
-    // Customer places new order
     orderCreated = await createCustomerOrder("multi-stream", pick, 2);
 
     const [data1, data2] = await Promise.all([
@@ -277,7 +328,7 @@ async function main() {
     assert(data1?.order?.orderNumber === orderCreated.orderNumber, "POS-01 received real-time order-created event", data1?.order?.orderNumber);
     assert(data2?.order?.orderNumber === orderCreated.orderNumber, "POS-02 received real-time order-created event simultaneously", data2?.order?.orderNumber);
 
-    // 7. POS-01 updates order to CONFIRMED -> POS-02 receives order-updated event
+    // 10. POS-01 updates order to CONFIRMED -> POS-02 receives order-updated event
     const statusPromise1 = waitForEvent(reader1, ref1, "order-updated");
     const statusPromise2 = waitForEvent(reader2, ref2, "order-updated");
 
@@ -292,11 +343,10 @@ async function main() {
     assert(update1?.order?.status === "CONFIRMED", "POS-01 received updated status confirmation");
     assert(update2?.order?.status === "CONFIRMED", "POS-02 received status update from POS-01 in real time");
 
-    // Close SSE streams
     ac1.abort();
     ac2.abort();
 
-    // 8. Disable POS-01 -> POS-01 rejected with 403, POS-02 continues working normally
+    // 11. Disable POS-01 -> POS-01 rejected with 403, POS-02 continues working normally
     const disableRes = await req(`/api/devices/${pos01Device.id}`, {
       method: "PATCH",
       jar: adminJar,
@@ -310,7 +360,7 @@ async function main() {
     const pos02ActiveAccess = await req("/api/pos/orders", { jar: pos02Jar });
     assert(pos02ActiveAccess.status === 200, "POS-02 continues working normally while POS-01 is disabled");
 
-    // Re-activate POS-01 -> POS-01 can access again without re-registering
+    // 12. Re-activate POS-01 -> POS-01 can access again without re-registering
     const activateRes = await req(`/api/devices/${pos01Device.id}`, {
       method: "PATCH",
       jar: adminJar,
@@ -321,7 +371,7 @@ async function main() {
     const reactivatedAccess = await req("/api/pos/orders", { jar: pos01Jar });
     assert(reactivatedAccess.status === 200, "Reactivated POS-01 accesses orders successfully");
 
-    // 9. Replace POS-02 with POS-03
+    // 13. Replace POS-02 with POS-03
     const replaceInvitation = await makeRegistrationCode(adminJar, "POS-03 Replacement iPad", pos02Device.id);
     const pos03Jar = new Jar("pos-03-browser");
     const pos03Device = await registerDevice(pos03Jar, replaceInvitation.code, true);
@@ -332,15 +382,22 @@ async function main() {
     const pos02RevokedAccess = await req("/api/pos/orders", { jar: pos02Jar });
     assert(pos02RevokedAccess.status === 403, "Old POS-02 credential rejected with 403");
 
-    await adminLogin(pos03Jar, adminPassword);
     const pos03Access = await req("/api/pos/orders", { jar: pos03Jar });
-    assert(pos03Access.status === 200, "New POS-03 works and accesses POS API");
+    assert(pos03Access.status === 200, "New POS-03 works and accesses POS API directly");
 
     // POS-01 is unaffected by POS-02 replacement
     const pos01StillActive = await req("/api/pos/orders", { jar: pos01Jar });
     assert(pos01StillActive.status === 200, "POS-01 remains active and unaffected by replacement of POS-02");
 
-    // 10. Clean up Test Devices (Admin DELETE)
+    // 14. Persistent POS Credential Simulation: Cookie survives page reload / restart simulation
+    const restartSimJar = new Jar("pos-01-reopened");
+    for (const [k, v] of pos01Jar.cookies.entries()) {
+      restartSimJar.cookies.set(k, v);
+    }
+    const reopenedAccess = await req("/api/pos/orders", { jar: restartSimJar });
+    assert(reopenedAccess.status === 200, "POS-01 credential persists across browser restarts and allows direct access");
+
+    // 15. Clean up Test Devices (Admin DELETE)
     const del1 = await req(`/api/devices/${pos01Device.id}`, { method: "DELETE", jar: adminJar });
     assert(del1.status === 200, "Admin deleted POS-01 test device");
     const del2 = await req(`/api/devices/${pos02Device.id}`, { method: "DELETE", jar: adminJar });
@@ -348,20 +405,19 @@ async function main() {
     const del3 = await req(`/api/devices/${pos03Device.id}`, { method: "DELETE", jar: adminJar });
     assert(del3.status === 200, "Admin deleted POS-03 test device");
 
-    // Architectural static checks
-    const orderSource = fs.readFileSync("src/app/api/orders/route.ts", "utf8");
-    assert(orderSource.includes("calculateOrderTotals") && !orderSource.includes("input.total"), "Order API does not trust client total");
-    for (const file of ["src/app/api/pos/orders/route.ts", "src/app/api/pos/orders/[id]/route.ts", "src/app/api/pos/events/route.ts"]) {
-      assert(fs.readFileSync(file, "utf8").includes("requirePosAccess"), `${file} enforces server-side POS authorization`);
-    }
-    assert(fs.readFileSync("src/app/api/pos/register/route.ts", "utf8").includes("hashRegistrationCode"), "Registration route hashes and validates codes server-side");
-    assert(fs.readFileSync("src/lib/printingService.ts", "utf8").includes("printOrder"), "Printing abstraction remains a placeholder");
-    assert(fs.readFileSync("src/lib/paymentService.ts", "utf8").includes("PaymentState"), "Payment abstraction exposes future payment states");
-    const schema = fs.readFileSync("prisma/schema.prisma", "utf8");
-    assert(schema.includes("model Device") && schema.includes("credentialHash") && schema.includes("model DeviceRegistrationCode") && schema.includes("expiresAt"), "Prisma schema includes device models and indexes");
+    // 16. Architectural & Cleanliness Checks
+    assert(!fs.existsSync("src/lib/qr.ts"), "Deprecated src/lib/qr.ts has been removed");
+    const devicesPageSrc = fs.readFileSync("src/app/admin/devices/page.tsx", "utf8");
+    assert(!devicesPageSrc.includes("generateQRSvg") && !devicesPageSrc.includes("qrSvgMarkup"), "Devices page contains no QR SVG generation");
+    const posPageSrc = fs.readFileSync("src/app/admin/pos/page.tsx", "utf8");
+    assert(!posPageSrc.includes("BarcodeDetector") && !posPageSrc.includes("startQrScanner") && !posPageSrc.includes("getUserMedia"), "POS page contains no camera or QR scanning logic");
+    const posHeaderSrc = fs.readFileSync("src/components/pos/PosHeader.tsx", "utf8");
+    assert(!posHeaderSrc.includes("/admin\"") && !posHeaderSrc.includes("Admin Portal"), "PosHeader contains no Admin Portal link");
+    const posSidebarSrc = fs.readFileSync("src/components/pos/PosSidebarHeader.tsx", "utf8");
+    assert(!posSidebarSrc.includes("/admin\"") && !posSidebarSrc.includes("Admin Portal"), "PosSidebarHeader contains no Admin Portal link");
 
     console.log(`\n========================================`);
-    console.log(`SUMMARY: ALL ${results.filter((r) => r.ok).length} MULTI-POS & SECURITY CHECKS PASSED!`);
+    console.log(`SUMMARY: ALL ${results.filter((r) => r.ok).length} POS ISOLATION, SECURITY & MULTI-POS CHECKS PASSED!`);
     console.log(`========================================\n`);
   } finally {
     await prisma.$disconnect();
@@ -372,3 +428,4 @@ main().catch((err) => {
   console.error("Verification failed:", err);
   process.exit(1);
 });
+

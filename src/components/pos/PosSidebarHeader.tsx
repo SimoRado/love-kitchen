@@ -1,8 +1,7 @@
 "use client";
 
 import React from "react";
-import Link from "next/link";
-import { RefreshCw, ExternalLink } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { PosTab } from "./PosHeader";
 
 interface PosSidebarHeaderProps {
@@ -56,13 +55,6 @@ export default function PosSidebarHeader({
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-orange-600" : ""}`} />
           </button>
-          <Link
-            href="/admin"
-            className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-600 hover:text-slate-900 transition-colors"
-            title="Admin Portal"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-          </Link>
         </div>
       </div>
 

@@ -1,55 +1,50 @@
 # Vercel Production Deployment Guide — Love Kitchen
 
-This guide contains the exact steps to deploy the Love Kitchen restaurant platform to Vercel.
+This guide contains the exact steps to finalize the deployment of the Love Kitchen restaurant platform on Vercel with Supabase PostgreSQL and Supabase Storage.
 
 ---
 
-## 1. Environment Variables in Vercel
+## 1. Branch Configuration in Vercel
 
-In your **Vercel Project Dashboard** $\rightarrow$ **Settings** $\rightarrow$ **Environment Variables**, configure the following:
+The production-ready codebase with Supabase Realtime, multi-POS device authentication, and automatic image optimization is on the **`new`** branch (commit `8b3dfc9` or later).
 
-| Variable | Description | Example / Source |
+To deploy:
+- **Option A (Recommended)**: In **Vercel Project Settings $\rightarrow$ Git $\rightarrow$ Production Branch**, set the Production Branch to **`new`** and trigger a redeployment.
+- **Option B**: Merge the **`new`** branch into **`main`** and push to GitHub.
+
+---
+
+## 2. Environment Variables in Vercel
+
+In your **Vercel Project Dashboard** $\rightarrow$ **Settings** $\rightarrow$ **Environment Variables**, configure the following variables for **Production** (and Preview if needed):
+
+| Variable | Description | Value / Format |
 | :--- | :--- | :--- |
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:pass@host:5432/dbname?sslmode=require` (Auto-filled if using Vercel Postgres/Neon) |
-| `ADMIN_PASSWORD` | Password to access `/admin` | Choose a strong password (e.g. `YourSecureAdminPass2026!`) |
-| `ADMIN_SESSION_SECRET` | 32+ character random secret for HMAC tokens | Generate via terminal: `openssl rand -hex 32` |
-| `BLOB_READ_WRITE_TOKEN` | Vercel Blob persistent storage token | Auto-filled when connecting Vercel Blob store |
+| `DATABASE_URL` | Supabase Transaction Pooler (port 6543) | `postgresql://postgres.[REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres?pgbouncer=true` |
+| `DIRECT_URL` | Supabase Direct Connection (port 5432) | `postgresql://postgres.[REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:5432/postgres` |
+| `ADMIN_PASSWORD` | Password to access `/admin` | Choose a strong, secret production password |
+| `ADMIN_SESSION_SECRET` | 32+ character secret for HMAC session tokens | Generate via terminal: `openssl rand -hex 32` |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase Project URL | `https://eeqknxbboyupavepvsng.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase Public Anonymous API Key | Found in Supabase Dashboard $\rightarrow$ Project Settings $\rightarrow$ API |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase Service Role Secret Key | Found in Supabase Dashboard $\rightarrow$ Project Settings $\rightarrow$ API (Never expose to client) |
 
 ---
 
-## 2. Storage Setup on Vercel
+## 3. Storage Setup in Supabase
 
-1. **PostgreSQL Database**:
-   - In Vercel $\rightarrow$ **Storage** tab $\rightarrow$ Create or Connect **Postgres** (or Neon / Supabase).
-   - Link it to your project to automatically populate `DATABASE_URL`.
-2. **Vercel Blob Storage** (for Product Images):
-   - In Vercel $\rightarrow$ **Storage** tab $\rightarrow$ Create **Blob** store.
-   - Link it to your project to automatically populate `BLOB_READ_WRITE_TOKEN`.
-
----
-
-## 3. Apply Database Migrations
-
-Once your PostgreSQL database is linked, run the initial migration against production:
-
-```bash
-npx prisma migrate deploy
-```
-
-*(Optional)* To seed the initial menu (Burgers, Pizza, Sides, Drinks, Opening Hours, Settings):
-```bash
-npx prisma db seed
-```
+1. **Storage Bucket**: The `product-images` bucket is configured with:
+   - **Public Access**: Enabled (public read)
+   - **File Size Limit**: 30 MB (`31457280` bytes)
+   - **Allowed MIME Types**: `image/jpeg`, `image/png`, `image/webp`, `image/gif`, `image/avif`, `image/heic`
+2. **Next.js Config**: `next.config.ts` includes `*.supabase.co` in `images.remotePatterns` for optimized image serving.
 
 ---
 
 ## 4. Deploy & Verify
 
-1. Push your latest commits to GitHub (`git push origin main`).
-2. Vercel will trigger a production build (`npm run build` runs `prisma generate` and compiles Next.js).
-3. Test the following in production:
-   - **Storefront** (`/`): View menu, category filter, product modifiers dialog, cart drawer.
-   - **Checkout** (`/checkout`): Place a test order.
-   - **Admin Login** (`/admin/login`): Log in using `ADMIN_PASSWORD`.
-   - **Admin Products** (`/admin/products`): Upload a product image (persisted in Vercel Blob) and create/edit a product.
-   - **Admin Settings** (`/admin/settings`): Configure opening hours, delivery fee, WhatsApp number, Google Maps link.
+1. Trigger a fresh deployment in Vercel (or push to the configured production branch).
+2. Verify on the deployed site:
+   - **Admin Product Add/Edit**: Changes persist directly in Supabase PostgreSQL and show immediately on the customer site without caching staleness.
+   - **Product Image Upload**: Camera photos (up to 30 MB) upload directly to Supabase Storage and are automatically converted to optimized WebP (`1200x750`, quality 80), displaying immediately on the customer menu.
+   - **POS Register & Realtime**: POS devices can pair via QR code and receive live order updates via Supabase Realtime.
+

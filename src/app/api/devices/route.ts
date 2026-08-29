@@ -95,10 +95,6 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Clean pairing payload for QR code (points to POS pairing screen with prefilled code)
-    const origin = request.nextUrl.origin;
-    const qrPayload = `${origin}/admin/pos?code=${encodeURIComponent(code)}`;
-
     return NextResponse.json({
       success: true,
       data: {
@@ -108,7 +104,6 @@ export async function POST(request: NextRequest) {
         replaceDeviceId,
         deviceName: registration.deviceName,
         deviceType: registration.deviceType,
-        qrPayload,
       },
     }, { status: 201 });
   } catch (error) {

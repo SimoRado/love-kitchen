@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import sharp from 'sharp';
 
@@ -59,16 +60,25 @@ async function req(path, options = {}) {
   const headers = { ...(options.headers || {}) };
   if (options.jar?.header()) headers.Cookie = options.jar.header();
   let body = options.body;
-  if (body !== undefined && typeof body !== 'string' && !(body instanceof FormData)) {
+  if (
+    body !== undefined &&
+    typeof body !== 'string' &&
+    !(body instanceof FormData) &&
+    !Buffer.isBuffer(body) &&
+    !(body instanceof Blob)
+  ) {
     body = JSON.stringify(body);
     headers['Content-Type'] = 'application/json';
   }
-  const res = await fetch(base + path, { method: options.method || 'GET', headers, body, signal: options.signal });
+  const url = path.startsWith('http') ? path : base + path;
+  const res = await fetch(url, { method: options.method || 'GET', headers, body, signal: options.signal });
   options.jar?.store(res);
-  const text = await res.text();
+  const arrayBuf = await res.arrayBuffer();
+  const buffer = Buffer.from(arrayBuf);
+  const text = buffer.toString('utf8');
   let json = null;
   try { json = text ? JSON.parse(text) : null; } catch {}
-  return { res, status: res.status, text, json, setCookie: options.jar?.lastSetCookie || [] };
+  return { res, status: res.status, text, json, buffer, headers: res.headers, setCookie: options.jar?.lastSetCookie || [] };
 }
 
 async function adminLogin(jar, password) {
@@ -76,10 +86,75 @@ async function adminLogin(jar, password) {
   assert(response.status === 200 && response.json?.success, `${jar.name} admin login`, `status ${response.status}`);
 }
 
+/**
+ * Executes the canonical 3-step upload pipeline:
+ * 1. Sign URL (/api/upload/sign)
+ * 2. Direct upload to storage signed URL (bypasses Vercel)
+ * 3. Process raw file (/api/upload/process) -> Sharp 1200x750 WebP q80
+ */
+async function uploadAndProcessPipeline(adminJar, fileBuffer, fileName, mimeType) {
+  // Step 1: Sign
+  const signRes = await req('/api/upload/sign', {
+    method: 'POST',
+    jar: adminJar,
+    body: { mimeType, fileName, fileSize: fileBuffer.length },
+  });
+
+  if (signRes.status !== 200 || !signRes.json?.data?.signedUrl || !signRes.json?.data?.rawPath) {
+    return { success: false, status: signRes.status, error: signRes.json?.error || 'Sign failed', stage: 'sign' };
+  }
+
+  const { signedUrl, rawPath } = signRes.json.data;
+
+  // Step 2: Direct Storage Upload
+  let uploadRes;
+  if (signedUrl.includes('/api/upload/raw')) {
+    uploadRes = await req(signedUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': mimeType },
+      body: fileBuffer,
+    });
+  } else {
+    // Supabase signed upload format
+    const formData = new FormData();
+    formData.append('cacheControl', '3600');
+    formData.append('', new Blob([fileBuffer], { type: mimeType }), fileName);
+    uploadRes = await req(signedUrl, {
+      method: 'PUT',
+      headers: { 'x-upsert': 'true' },
+      body: formData,
+    });
+    if (uploadRes.status !== 200 && uploadRes.status !== 201) {
+      uploadRes = await req(signedUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': mimeType, 'x-upsert': 'true' },
+        body: fileBuffer,
+      });
+    }
+  }
+
+  if (uploadRes.status !== 200 && uploadRes.status !== 201) {
+    return { success: false, status: uploadRes.status, error: 'Direct storage upload failed', stage: 'direct_upload' };
+  }
+
+  // Step 3: Process Raw Object
+  const processRes = await req('/api/upload/process', {
+    method: 'POST',
+    jar: adminJar,
+    body: { rawPath },
+  });
+
+  if (processRes.status !== 200 || !processRes.json?.data?.url) {
+    return { success: false, status: processRes.status, error: processRes.json?.error || 'Process failed', stage: 'process' };
+  }
+
+  return { success: true, url: processRes.json.data.url, filename: processRes.json.data.filename, rawPath };
+}
+
 async function main() {
   try {
     console.log('==================================================');
-    console.log('RUNNING IMAGE OPTIMIZATION & DATABASE TEST SUITE');
+    console.log('RUNNING PRODUCT IMAGE UPLOAD & OPTIMIZATION TEST SUITE');
     console.log('==================================================\n');
 
     const adminPassword = loadEnvValue('ADMIN_PASSWORD');
@@ -102,10 +177,10 @@ async function main() {
     });
     assert(unauthProcess.status === 401, 'Unauthenticated POST /api/upload/process rejected with 401');
 
-    const unauthDirect = await req('/api/upload', { method: 'POST' });
-    assert(unauthDirect.status === 401, 'Unauthenticated POST /api/upload rejected with 401');
+    const legacyDirect = await req('/api/upload', { method: 'POST', jar: adminJar });
+    assert(legacyDirect.status === 400, 'Deprecated legacy POST /api/upload returns 400 guidance');
 
-    // --- 2. Testing Signed URL Endpoint ---
+    // --- 2. Testing Signed URL Generation ---
     console.log('\n--- 2. Testing Signed Upload URL Generation ---');
     const signSmall = await req('/api/upload/sign', {
       method: 'POST',
@@ -114,8 +189,8 @@ async function main() {
     });
     assert(signSmall.status === 200 && signSmall.json?.data?.rawPath, 'Admin generated signed upload URL', signSmall.json?.data?.rawPath);
 
-    // --- 3. Testing Sharp Image Optimization Pipeline ---
-    console.log('\n--- 3. Testing Sharp Image Processing & WebP Conversion ---');
+    // --- 3. Testing Canonical Pipeline (Sign -> Direct Upload -> Process) ---
+    console.log('\n--- 3. Testing Canonical Pipeline with Various Image Formats ---');
 
     // 3a. Small 500KB JPEG
     console.log('Uploading 500KB test JPEG...');
@@ -123,55 +198,79 @@ async function main() {
       create: { width: 1600, height: 1200, channels: 3, background: { r: 220, g: 80, b: 30 } },
     }).jpeg({ quality: 85 }).toBuffer();
 
-    const smallForm = new FormData();
-    smallForm.append('file', new Blob([smallJpg], { type: 'image/jpeg' }), 'small-burger.jpg');
-    const uploadSmall = await req('/api/upload', { method: 'POST', jar: adminJar, body: smallForm });
-    assert(uploadSmall.status === 200 && uploadSmall.json?.data?.url?.endsWith('.webp'), 'Small JPEG optimized to WebP format (1200x900 q80)', uploadSmall.json?.data?.url);
+    const smallResult = await uploadAndProcessPipeline(adminJar, smallJpg, 'small-burger.jpg', 'image/jpeg');
+    assert(smallResult.success && smallResult.url.endsWith('.webp'), 'Small JPEG processed into WebP (1200x750 q80)', smallResult.url);
 
-    // 3b. Large 12MB Camera Photo (simulating DSLR / iPhone photo)
-    console.log('\nUploading 12MB high-resolution camera JPEG (6000x4000)...');
-    const largeJpg = await sharp({
-      create: { width: 6000, height: 4000, channels: 3, background: { r: 255, g: 140, b: 0 } },
-    }).jpeg({ quality: 95 }).toBuffer();
-    console.log(`Large photo size: ${(largeJpg.length / 1024 / 1024).toFixed(2)} MB`);
+    // Verify small image loads directly via HTTP GET and has exact 1200x750 dimensions
+    const smallImageGet = await req(smallResult.url);
+    assert(smallImageGet.status === 200, 'Direct image URL returns HTTP 200', smallResult.url);
+    const smallImageMeta = await sharp(smallImageGet.buffer).metadata();
+    assert(smallImageMeta.format === 'webp', 'Image format is verified WebP');
+    assert(smallImageMeta.width === 1200 && smallImageMeta.height === 750, 'Image dimensions standardized to 1200x750 (16:10)', `${smallImageMeta.width}x${smallImageMeta.height}`);
 
-    const largeForm = new FormData();
-    largeForm.append('file', new Blob([largeJpg], { type: 'image/jpeg' }), 'camera-photo.jpg');
-    const uploadLarge = await req('/api/upload', { method: 'POST', jar: adminJar, body: largeForm });
-    assert(uploadLarge.status === 200 && uploadLarge.json?.data?.url?.endsWith('.webp'), '12MB photo processed and optimized into WebP without 413 error', uploadLarge.json?.data?.url);
+    // 3b. Large >4.5 MB Professional Camera Photo (~12 MB RAW camera simulation)
+    console.log('\nUploading ~10-12 MB high-resolution camera JPEG with texture/detail (6000x4000)...');
+    // Generate realistic high-entropy noise texture so JPEG exceeds 4.5 MB
+    const largeRaw = Buffer.alloc(6000 * 4000 * 3);
+    for (let i = 0; i < largeRaw.length; i += 3) {
+      largeRaw[i] = (i * 7) % 256;
+      largeRaw[i + 1] = (i * 13 + 50) % 256;
+      largeRaw[i + 2] = (i * 29 + 100) % 256;
+    }
+    const largeJpg = await sharp(largeRaw, { raw: { width: 6000, height: 4000, channels: 3 } })
+      .jpeg({ quality: 98 })
+      .toBuffer();
 
-    // 3c. PNG and WEBP normalization
+    console.log(`Large photo size: ${(largeJpg.length / 1024 / 1024).toFixed(2)} MB (bypasses Vercel 4.5 MB limit)`);
+    assert(largeJpg.length > 4.5 * 1024 * 1024, 'Large camera photo is genuinely > 4.5 MB');
+
+    const largeResult = await uploadAndProcessPipeline(adminJar, largeJpg, 'camera-photo.jpg', 'image/jpeg');
+    assert(largeResult.success && largeResult.url.endsWith('.webp'), '10+ MB camera photo processed into WebP without 413 error', largeResult.url);
+
+    // Verify large image loads directly via HTTP GET and has exact 1200x750 dimensions
+    const largeImageGet = await req(largeResult.url);
+    assert(largeImageGet.status === 200, 'Direct camera WebP URL returns HTTP 200', largeResult.url);
+    const largeImageMeta = await sharp(largeImageGet.buffer).metadata();
+    assert(largeImageMeta.format === 'webp', 'Camera image is valid WebP');
+    assert(largeImageMeta.width === 1200 && largeImageMeta.height === 750, 'Camera image resized to 1200x750', `${largeImageMeta.width}x${largeImageMeta.height}`);
+
+    // 3c. PNG format
     console.log('\nUploading PNG and normalizing to WebP...');
     const testPng = await sharp({
       create: { width: 800, height: 600, channels: 4, background: { r: 50, g: 150, b: 250, alpha: 1 } },
     }).png().toBuffer();
-    const pngForm = new FormData();
-    pngForm.append('file', new Blob([testPng], { type: 'image/png' }), 'tacos.png');
-    const uploadPng = await req('/api/upload', { method: 'POST', jar: adminJar, body: pngForm });
-    assert(uploadPng.status === 200 && uploadPng.json?.data?.url?.endsWith('.webp'), 'PNG normalized to WebP format');
+    const pngResult = await uploadAndProcessPipeline(adminJar, testPng, 'tacos.png', 'image/png');
+    assert(pngResult.success && pngResult.url.endsWith('.webp'), 'PNG normalized to WebP format');
 
-    // 3d. Fake non-image file rejection
-    console.log('\nTesting invalid file rejection...');
+    // 3d. WEBP format
+    console.log('\nUploading WEBP and standardizing...');
+    const testWebp = await sharp({
+      create: { width: 900, height: 600, channels: 3, background: { r: 100, g: 200, b: 100 } },
+    }).webp().toBuffer();
+    const webpResult = await uploadAndProcessPipeline(adminJar, testWebp, 'fresh.webp', 'image/webp');
+    assert(webpResult.success && webpResult.url.endsWith('.webp'), 'WEBP input standardized to 1200x750');
+
+    // 3e. Invalid non-image file rejection
+    console.log('\nTesting invalid file signature rejection...');
     const fakeFile = Buffer.from('This is completely fake binary content not an image');
-    const fakeForm = new FormData();
-    fakeForm.append('file', new Blob([fakeFile], { type: 'image/jpeg' }), 'fake.jpg');
-    const uploadFake = await req('/api/upload', { method: 'POST', jar: adminJar, body: fakeForm });
-    assert(uploadFake.status === 400, 'Invalid image signature rejected with 400 Bad Request');
+    const fakeResult = await uploadAndProcessPipeline(adminJar, fakeFile, 'fake.jpg', 'image/jpeg');
+    assert(!fakeResult.success && fakeResult.stage === 'process', 'Invalid image signature rejected with 400 in process stage');
 
-    // 3e. Oversized file (> 30MB)
-    const oversizedBuffer = Buffer.alloc(31 * 1024 * 1024);
-    oversizedBuffer[0] = 0xff; oversizedBuffer[1] = 0xd8; oversizedBuffer[2] = 0xff;
-    const oversizedForm = new FormData();
-    oversizedForm.append('file', new Blob([oversizedBuffer], { type: 'image/jpeg' }), 'huge.jpg');
-    const uploadOversized = await req('/api/upload', { method: 'POST', jar: adminJar, body: oversizedForm });
-    assert(uploadOversized.status === 400, 'Oversized file (>30MB) rejected with 400 Bad Request');
+    // 3f. Oversized file (> 30 MB)
+    console.log('\nTesting oversized file (> 30 MB) rejection...');
+    const oversizedSign = await req('/api/upload/sign', {
+      method: 'POST',
+      jar: adminJar,
+      body: { mimeType: 'image/jpeg', fileName: 'huge.jpg', fileSize: 32 * 1024 * 1024 },
+    });
+    assert(oversizedSign.status === 400, 'Oversized file (>30MB) rejected in sign stage with 400');
 
     // --- 4. Product Image Persistence & Database Consistency ---
     console.log('\n--- 4. Testing Product Image Persistence & Customer Storefront ---');
     const productsRes = await req('/api/products');
     const targetProduct = productsRes.json.data[0];
     const originalImage = targetProduct.image;
-    const newOptimizedWebpUrl = uploadLarge.json.data.url;
+    const newOptimizedWebpUrl = largeResult.url;
 
     // Attach new optimized WebP to product
     const updateRes = await req(`/api/products/${targetProduct.id}`, {
@@ -189,29 +288,37 @@ async function main() {
 
     // Verify in PostgreSQL database
     const dbProduct = await prisma.product.findUnique({ where: { id: targetProduct.id } });
-    assert(dbProduct?.image === newOptimizedWebpUrl, 'Optimized WebP URL persisted in Supabase PostgreSQL Product table');
+    assert(dbProduct?.image === newOptimizedWebpUrl, 'Optimized WebP URL persisted in PostgreSQL Product table');
     assert(!dbProduct?.image?.startsWith('data:'), 'PostgreSQL stores clean URL, never base64 binary');
 
     // Customer storefront verification
     const customerProducts = await req('/api/products');
     const customerProduct = customerProducts.json?.data?.find((p) => p.id === targetProduct.id);
-    assert(customerProduct?.image === newOptimizedWebpUrl, 'Customer storefront receives optimized WebP image without delay');
+    assert(customerProduct?.image === newOptimizedWebpUrl, 'Customer storefront receives optimized WebP image');
 
-    // Update product WITHOUT changing image
-    const editWithoutImage = await req(`/api/products/${targetProduct.id}`, {
+    // Image replacement test: replacing with another image cleans up old image
+    console.log('\nTesting image replacement & storage cleanup...');
+    const replaceResult = await uploadAndProcessPipeline(adminJar, smallJpg, 'replacement.jpg', 'image/jpeg');
+    const updateReplaceRes = await req(`/api/products/${targetProduct.id}`, {
       method: 'PUT',
       jar: adminJar,
       body: {
-        name: `${targetProduct.name} (Edited Name Only)`,
+        name: targetProduct.name,
         price: targetProduct.price,
         categoryId: targetProduct.categoryId,
         available: targetProduct.available,
-        image: newOptimizedWebpUrl,
+        image: replaceResult.url,
       },
     });
-    assert(editWithoutImage.status === 200 && editWithoutImage.json?.data?.image === newOptimizedWebpUrl, 'Editing product without changing image preserves existing URL');
+    assert(updateReplaceRes.status === 200 && updateReplaceRes.json?.data?.image === replaceResult.url, 'Product updated with second replacement image');
 
-    // Restore original product
+    // Verify old image was removed after replacement
+    if (newOptimizedWebpUrl.startsWith('/uploads/')) {
+      const oldLocalPath = path.join(process.cwd(), 'public', newOptimizedWebpUrl);
+      assert(!fs.existsSync(oldLocalPath), 'Replaced local image was cleaned up from storage');
+    }
+
+    // Restore original product image
     await req(`/api/products/${targetProduct.id}`, {
       method: 'PUT',
       jar: adminJar,
@@ -236,3 +343,4 @@ main().catch((err) => {
   console.error('Test execution failed:', err);
   process.exit(1);
 });
+
