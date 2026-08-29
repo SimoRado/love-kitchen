@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { prisma } from "@/lib/prisma";
 import { getAdminUserFromRequest } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
@@ -12,19 +13,22 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const { searchParams } = new URL(request.url);
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "50", 10)));
+
+    const logs = await prisma.adminAuditLog.findMany({
+      take: limit,
+      orderBy: { createdAt: "desc" },
+    });
+
     return NextResponse.json({
       success: true,
-      data: {
-        id: admin.id,
-        email: admin.email,
-        adminAccessPath: admin.adminAccessPath,
-        createdAt: admin.createdAt,
-      },
+      data: logs,
     });
-  } catch (err) {
-    console.error("Auth profile error:", err);
+  } catch (error) {
+    console.error("Fetch audit logs error:", error);
     return NextResponse.json(
-      { success: false, error: "Server error retrieving administrator profile." },
+      { success: false, error: "Failed to fetch audit logs." },
       { status: 500 }
     );
   }

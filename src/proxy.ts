@@ -1,63 +1,55 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import {
-  ADMIN_COOKIE_NAME,
-  verifyAdminSessionToken,
-} from "./lib/auth";
-import { POS_DEVICE_COOKIE_NAME } from "./lib/deviceAuth";
+
+export const ADMIN_COOKIE_NAME = "resto_admin_session";
+export const POS_DEVICE_COOKIE_NAME = "resto_pos_device";
+export const DEFAULT_ADMIN_ACCESS_PATH = (process.env.ADMIN_ACCESS_PATH || "lovekitchen").toLowerCase();
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const adminToken = request.cookies.get(ADMIN_COOKIE_NAME)?.value;
-  const hasPosCookie = Boolean(request.cookies.get(POS_DEVICE_COOKIE_NAME)?.value);
-  const isAuthenticatedAdmin = await verifyAdminSessionToken(adminToken);
+  const hasAdminCookie = Boolean(adminToken && adminToken.length > 10);
+  const adminAccessPath = DEFAULT_ADMIN_ACCESS_PATH;
+  const normalizedPath = pathname.replace(/^\//, "").toLowerCase();
 
-  // 1. POS routes: Always accessible directly (renders registration UI if un-paired, or register UI if paired)
+  // 1. POS routes: Always accessible directly at /admin/pos
   if (pathname === "/admin/pos" || pathname.startsWith("/admin/pos/")) {
     return NextResponse.next();
   }
 
-  // 2. Admin Login Page:
-  if (pathname === "/admin/login") {
-    if (isAuthenticatedAdmin) {
+  // 2. Custom Admin Entry Path (e.g. /lovekitchen or configured access path)
+  if (normalizedPath === adminAccessPath && normalizedPath !== "admin") {
+    if (hasAdminCookie) {
       return NextResponse.redirect(new URL("/admin", request.url));
     }
-    // Isolate POS device: Prevent cashiers on registered POS iPads from accessing the admin login form
-    if (hasPosCookie) {
-      return NextResponse.redirect(new URL("/admin/pos", request.url));
+    // Unauthenticated: rewrite internally to login form while keeping URL in address bar
+    return NextResponse.rewrite(new URL("/admin/login", request.url));
+  }
+
+  // 3. /admin/login page
+  if (pathname === "/admin/login") {
+    if (hasAdminCookie) {
+      return NextResponse.redirect(new URL("/admin", request.url));
     }
     return NextResponse.next();
   }
 
-  // 3. Protected Admin Management Routes (/admin, /admin/products, /admin/settings, /admin/devices, etc.)
-  if (!isAuthenticatedAdmin) {
-    // If the client is a registered POS iPad attempting to access admin routes, bounce back to POS interface
-    if (hasPosCookie) {
-      return NextResponse.redirect(new URL("/admin/pos", request.url));
+  // 4. Admin Dashboard & Sub-routes (/admin, /admin/products, /admin/settings, /admin/devices, /admin/security, etc.)
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) {
+    if (hasAdminCookie) {
+      return NextResponse.next();
     }
 
-    // Unauthenticated general browser: redirect to admin login
-    const loginUrl = new URL("/admin/login", request.url);
-    loginUrl.searchParams.set("redirect", pathname);
-    const response = NextResponse.redirect(loginUrl);
-    if (adminToken) {
-      response.cookies.set({
-        name: ADMIN_COOKIE_NAME,
-        value: "",
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        path: "/",
-        maxAge: 0,
-      });
-    }
-    return response;
+    // Unauthenticated user: directly open the admin login page
+    return NextResponse.redirect(new URL("/admin/login", request.url));
   }
 
+  // 5. Storefront & Public Routes: Pass through
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/admin/:path*"],
+  matcher: [
+    "/((?!api|_next/static|_next/image|favicon.ico|uploads).*)",
+  ],
 };
-

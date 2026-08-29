@@ -28,3 +28,18 @@ export async function GET(request: NextRequest) {
     },
   });
 }
+
+export async function DELETE() {
+  const response = NextResponse.json({
+    success: true,
+    message: "POS device credential cookie cleared.",
+  });
+  response.cookies.set({
+    name: "resto_pos_device",
+    value: "",
+    httpOnly: true,
+    path: "/",
+    maxAge: 0,
+  });
+  return response;
+}

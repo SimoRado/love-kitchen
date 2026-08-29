@@ -14,6 +14,7 @@ import {
   ChevronRight,
   MonitorCog,
   TabletSmartphone,
+  ShieldCheck,
 } from "lucide-react";
 
 interface AdminSidebarProps {
@@ -56,6 +57,12 @@ const navItems = [
     name: "Devices / POS",
     href: "/admin/devices",
     icon: TabletSmartphone,
+    exact: false,
+  },
+  {
+    name: "Account & Security",
+    href: "/admin/security",
+    icon: ShieldCheck,
     exact: false,
   },
   {

@@ -1,109 +1,126 @@
+import crypto from "node:crypto";
+import { AdminUser } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 
 export const ADMIN_COOKIE_NAME = "resto_admin_session";
+export const SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60; // 7 days
 
-function getAdminConfig() {
-  const password = process.env.ADMIN_PASSWORD;
-  const secret = process.env.ADMIN_SESSION_SECRET;
+function sha256(value: string): string {
+  return crypto.createHash("sha256").update(value).digest("hex");
+}
 
-  if (!password || !secret || secret.length < 32) {
-    throw new Error(
-      "CRITICAL: ADMIN_PASSWORD is missing or ADMIN_SESSION_SECRET is missing/too short."
-    );
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
+
+/**
+ * Creates a new database-backed session for an administrator.
+ */
+export async function createAdminSession(
+  adminId: string,
+  ipOrReq?: string | NextRequest | null,
+  uaParam?: string | null
+): Promise<{ token: string; expiresAt: Date; sessionId: string }> {
+  const secret = crypto.randomBytes(32).toString("hex");
+  const tokenHash = sha256(`admin-session:${secret}`);
+  const expiresAt = new Date(Date.now() + SESSION_MAX_AGE_SECONDS * 1000);
+
+  let ip: string | null = null;
+  let ua: string | null = null;
+
+  if (ipOrReq && typeof ipOrReq === "object" && "headers" in ipOrReq) {
+    ip =
+      ipOrReq.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
+      ipOrReq.headers.get("x-real-ip") ||
+      null;
+    ua = ipOrReq.headers.get("user-agent") || null;
+  } else if (typeof ipOrReq === "string") {
+    ip = ipOrReq;
+    ua = uaParam || null;
   }
 
-  return { password, secret };
+  const session = await prisma.adminSession.create({
+    data: {
+      adminId,
+      tokenHash,
+      userAgent: ua ? ua.slice(0, 500) : null,
+      ipAddress: ip ? ip.slice(0, 100) : null,
+      expiresAt,
+    },
+  });
+
+  const cookieToken = `${session.id}.${secret}`;
+  return { token: cookieToken, expiresAt, sessionId: session.id };
 }
 
 /**
- * Validate admin password
+ * Validates a session token string against the PostgreSQL AdminSession table.
+ * Returns the associated AdminUser if valid, otherwise null.
  */
-export async function validateAdminPassword(inputPassword: string): Promise<boolean> {
-  const { password, secret } = getAdminConfig();
-  if (!inputPassword) return false;
-  const expected = await createHmacSignature(`admin-password:${password}`, secret);
-  const received = await createHmacSignature(`admin-password:${inputPassword}`, secret);
-  return timingSafeStringEqual(received, expected);
-}
+export async function verifyAdminSessionToken(
+  token: string | null | undefined
+): Promise<AdminUser | null> {
+  if (!token || typeof token !== "string") return null;
 
-function timingSafeStringEqual(left: string, right: string): boolean {
-  if (left.length !== right.length) return false;
-  let difference = 0;
-  for (let index = 0; index < left.length; index++) {
-    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
-  }
-  return difference === 0;
-}
+  const dotIndex = token.indexOf(".");
+  if (dotIndex < 1) return null;
 
-/**
- * Convert string to hex
- */
-function toHex(buffer: ArrayBuffer): string {
-  return Array.from(new Uint8Array(buffer))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-/**
- * Creates HMAC signature using Web Crypto API (compatible with Edge and Node.js)
- */
-async function createHmacSignature(message: string, secret: string): Promise<string> {
-  const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    enc.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign", "verify"]
-  );
-  const signature = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    enc.encode(message)
-  );
-  return toHex(signature);
-}
-
-/**
- * Creates a signed session token: <timestamp>.<hmacSignature>
- */
-export async function createAdminSessionToken(): Promise<string> {
-  const { secret } = getAdminConfig();
-  const timestamp = Date.now().toString();
-  const signature = await createHmacSignature(`admin-session:${timestamp}`, secret);
-  return `${timestamp}.${signature}`;
-}
-
-/**
- * Verifies a signed session token
- */
-export async function verifyAdminSessionToken(token: string | null | undefined): Promise<boolean> {
-  if (!token || typeof token !== "string") return false;
+  const sessionId = token.slice(0, dotIndex);
+  const secret = token.slice(dotIndex + 1);
+  if (!sessionId || !secret) return null;
 
   try {
-    const { secret } = getAdminConfig();
-    const [timestamp, signature] = token.split(".");
-    if (!timestamp || !signature) return false;
+    const session = await prisma.adminSession.findUnique({
+      where: { id: sessionId },
+      include: { admin: true },
+    });
 
-    // Check expiration (7 days)
-    const tokenTime = parseInt(timestamp, 10);
-    if (isNaN(tokenTime) || Date.now() - tokenTime > 7 * 24 * 60 * 60 * 1000) {
-      return false;
+    if (!session || !session.admin) return null;
+
+    // Check expiration
+    if (session.expiresAt <= new Date()) {
+      await prisma.adminSession.delete({ where: { id: session.id } }).catch(() => {});
+      return null;
     }
 
-    const expectedSignature = await createHmacSignature(`admin-session:${timestamp}`, secret);
-    return timingSafeStringEqual(signature, expectedSignature);
-  } catch {
-    return false;
+    // Timing-safe comparison of token hash
+    const expectedHash = sha256(`admin-session:${secret}`);
+    if (!timingSafeEqual(expectedHash, session.tokenHash)) return null;
+
+    // Update lastActiveAt periodically (if more than 5 minutes old)
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    if (session.lastActiveAt < fiveMinutesAgo) {
+      await prisma.adminSession
+        .update({
+          where: { id: session.id },
+          data: { lastActiveAt: new Date() },
+        })
+        .catch(() => {});
+    }
+
+    return session.admin;
+  } catch (error) {
+    console.error("Error verifying admin session:", error);
+    return null;
   }
 }
 
 /**
- * Extracts and verifies session from NextRequest cookies
+ * Extracts and verifies the admin session from NextRequest cookies.
+ */
+export async function getAdminUserFromRequest(request: NextRequest): Promise<AdminUser | null> {
+  const token = request.cookies.get(ADMIN_COOKIE_NAME)?.value;
+  return verifyAdminSessionToken(token);
+}
+
+/**
+ * Boolean helper for route authorization checks.
  */
 export async function getAdminSessionFromRequest(request: NextRequest): Promise<boolean> {
-  const cookie = request.cookies.get(ADMIN_COOKIE_NAME);
-  return verifyAdminSessionToken(cookie?.value);
+  const admin = await getAdminUserFromRequest(request);
+  return Boolean(admin);
 }
 
 /**
@@ -113,8 +130,8 @@ export async function getAdminSessionFromRequest(request: NextRequest): Promise<
 export async function requireAdminAuth(
   request: NextRequest
 ): Promise<NextResponse | null> {
-  const isAuthenticated = await getAdminSessionFromRequest(request);
-  if (!isAuthenticated) {
+  const admin = await getAdminUserFromRequest(request);
+  if (!admin) {
     return NextResponse.json(
       {
         success: false,
@@ -124,4 +141,72 @@ export async function requireAdminAuth(
     );
   }
   return null;
+}
+
+/**
+ * Attaches the persistent HTTP-only admin session cookie to a NextResponse.
+ */
+export function setAdminSessionCookie(response: NextResponse, token: string) {
+  response.cookies.set({
+    name: ADMIN_COOKIE_NAME,
+    value: token,
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_MAX_AGE_SECONDS,
+  });
+}
+
+/**
+ * Clears the admin session cookie from a NextResponse.
+ */
+export function clearAdminSessionCookie(response: NextResponse) {
+  response.cookies.set({
+    name: ADMIN_COOKIE_NAME,
+    value: "",
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 0,
+  });
+}
+
+/**
+ * Invalidates a single session by its cookie token value.
+ */
+export async function invalidateSessionByToken(token: string | null | undefined): Promise<void> {
+  if (!token) return;
+  const dotIndex = token.indexOf(".");
+  if (dotIndex < 1) return;
+  const sessionId = token.slice(0, dotIndex);
+  try {
+    await prisma.adminSession.delete({ where: { id: sessionId } }).catch(() => {});
+  } catch {}
+}
+
+/**
+ * Global session invalidation: Revokes ALL sessions for an admin user (e.g. after password change).
+ */
+export async function invalidateAllAdminSessions(
+  adminId: string,
+  exceptSessionId?: string
+): Promise<void> {
+  try {
+    await prisma.$transaction([
+      prisma.adminUser.update({
+        where: { id: adminId },
+        data: { sessionVersion: { increment: 1 } },
+      }),
+      prisma.adminSession.deleteMany({
+        where: {
+          adminId,
+          ...(exceptSessionId ? { id: { not: exceptSessionId } } : {}),
+        },
+      }),
+    ]);
+  } catch (error) {
+    console.error("Failed to invalidate admin sessions:", error);
+  }
 }
