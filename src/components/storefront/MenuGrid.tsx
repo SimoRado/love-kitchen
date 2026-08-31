@@ -50,7 +50,7 @@ export default function MenuGrid({
   }, [products, activeCategoryId, searchQuery]);
 
   return (
-    <section id="menu" className="space-y-6 scroll-mt-36 sm:scroll-mt-32">
+    <section id="menu" className="space-y-6 scroll-mt-40 sm:scroll-mt-48">
       {/* Menu Header with Live Search */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -72,12 +72,12 @@ export default function MenuGrid({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search food by name..."
-            className="w-full pl-9 pr-8 py-2 rounded-xl border border-[#E8DFD1] bg-white text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+            className="w-full pl-9 pr-8 py-2 rounded-xl border border-[#EFE8DC] bg-white text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#C8102E]/20 focus:border-[#C8102E] transition-colors"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-700"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-700 cursor-pointer"
             >
               ✕
             </button>
@@ -88,7 +88,7 @@ export default function MenuGrid({
       {/* Products Grid or Empty State */}
       {filteredProducts.length === 0 ? (
         <div className="bg-white rounded-2xl border border-dashed border-[#E0D7C6] p-12 text-center">
-          <div className="w-12 h-12 rounded-full bg-orange-50 text-primary flex items-center justify-center mx-auto mb-3">
+          <div className="w-12 h-12 rounded-full bg-red-50 text-[#C8102E] flex items-center justify-center mx-auto mb-3">
             <UtensilsCrossed className="w-6 h-6" />
           </div>
           <h3 className="text-base font-semibold text-slate-800">
@@ -102,7 +102,7 @@ export default function MenuGrid({
           {searchQuery && (
             <button
               onClick={() => setSearchQuery("")}
-              className="mt-4 px-4 py-2 rounded-xl bg-primary text-white text-xs font-medium shadow-xs hover:bg-primary-hover transition-colors"
+              className="mt-4 px-4 py-2 rounded-xl bg-[#C8102E] hover:bg-[#B00D26] text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
             >
               Clear Search
             </button>

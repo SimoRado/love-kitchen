@@ -25,6 +25,9 @@ export default function AdminLayout({
     try {
       const res = await fetch("/api/auth/me", { cache: "no-store" });
       if (!res.ok) {
+        // Clear stale session cookie before redirecting
+        await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+
         // If not a valid admin, check if this is a registered POS device
         const hasPosDeviceCookie = document.cookie.includes("resto_pos_device=");
         if (hasPosDeviceCookie) {

@@ -37,6 +37,18 @@ function LoginForm() {
   const [success, setSuccess] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  // If already authenticated with a valid session in the database, redirect smoothly
+  React.useEffect(() => {
+    fetch("/api/auth/me", { cache: "no-store" })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.data) {
+          router.replace(redirectUrl);
+        }
+      })
+      .catch(() => {});
+  }, [redirectUrl, router]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !password.trim()) {

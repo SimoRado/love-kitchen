@@ -94,12 +94,12 @@ export default function StorefrontPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#FFFDF9] flex flex-col justify-center items-center p-6 text-center">
-        <div className="w-12 h-12 rounded-2xl bg-orange-100 text-primary flex items-center justify-center mb-4 animate-pulse">
-          <Loader2 className="w-6 h-6 animate-spin" />
+      <div className="min-h-screen bg-[#FAF7F0] flex flex-col justify-center items-center p-6 text-center">
+        <div className="w-12 h-12 rounded-2xl bg-red-100 text-[#C8102E] flex items-center justify-center mb-4 animate-pulse">
+          <Loader2 className="w-6 h-6 animate-spin text-[#C8102E]" />
         </div>
         <h2 className="text-lg font-bold text-slate-800 font-serif">
-          Preparing {settings?.name || "Dark Kitchen"} Menu...
+          Preparing {settings?.name || "Love Kitchen"} Menu...
         </h2>
         <p className="text-xs text-slate-500 mt-1">
           Loading fresh items, prices, and daily specials
@@ -110,7 +110,7 @@ export default function StorefrontPage() {
 
   if (isError) {
     return (
-      <div className="min-h-screen bg-[#FFFDF9] flex flex-col justify-center items-center p-6 text-center">
+      <div className="min-h-screen bg-[#FAF7F0] flex flex-col justify-center items-center p-6 text-center">
         <div className="max-w-md bg-white rounded-2xl border border-red-200 p-8 shadow-sm">
           <h2 className="text-lg font-bold text-slate-900">
             We couldn&apos;t load the menu
@@ -120,7 +120,7 @@ export default function StorefrontPage() {
           </p>
           <button
             onClick={fetchData}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold shadow-xs transition-colors"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#C8102E] hover:bg-[#B00D26] text-white text-xs font-bold shadow-xs transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
             <span>Retry Connection</span>
@@ -131,10 +131,10 @@ export default function StorefrontPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FFFDF9] text-slate-900 flex flex-col antialiased">
+    <div className="min-h-screen bg-[#FAF7F0] text-slate-900 flex flex-col antialiased">
       {/* 1. Navbar */}
       <StoreNavbar
-        restaurantName={settings?.name || "Dark Kitchen"}
+        restaurantName={settings?.name || "Love Kitchen"}
         restaurantSubtitle={settings?.subtitle}
         settings={settings}
         openStatus={openStatus}

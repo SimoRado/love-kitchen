@@ -13,13 +13,13 @@ export default function StoreHero() {
   };
 
   return (
-    <section className="relative overflow-hidden bg-gradient-to-b from-[#FFF7ED] to-[#FFFDF9] border-b border-[#EBE3D5]">
+    <section className="relative overflow-hidden bg-transparent">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 lg:py-20">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
           {/* Left Text Column */}
           <div className="lg:col-span-7 space-y-5 sm:space-y-6 text-center lg:text-left">
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 tracking-tight leading-[1.15] font-serif">
-              Fresh food, made with love & crafted for you.
+              Fresh food, made with love &amp; crafted for you.
             </h1>
 
             <p className="text-base sm:text-lg text-slate-600 max-w-xl mx-auto lg:mx-0 font-normal leading-relaxed">
@@ -31,20 +31,20 @@ export default function StoreHero() {
               <a
                 href="#menu"
                 onClick={handleScrollToMenu}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-sm font-bold shadow-md transition-all active:scale-95 cursor-pointer"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-xl bg-[#C8102E] hover:bg-[#B00D26] text-white text-sm font-bold shadow-md transition-all active:scale-95 cursor-pointer focus-visible:ring-2 focus-visible:ring-[#C8102E] focus-visible:outline-none"
               >
-                <span>View Menu & Order</span>
-                <ArrowDown className="w-4 h-4 animate-bounce" />
+                <span>View Menu &amp; Order</span>
+                <ArrowDown className="w-4 h-4" />
               </a>
 
               <div className="flex items-center gap-4 text-xs font-semibold text-slate-600">
                 <span className="flex items-center gap-1.5">
-                  <Bike className="w-4 h-4 text-primary" />
+                  <Bike className="w-4 h-4 text-[#C8102E]" />
                   <span>Fast Delivery</span>
                 </span>
                 <span className="text-slate-300">•</span>
                 <span className="flex items-center gap-1.5">
-                  <ShoppingBag className="w-4 h-4 text-primary" />
+                  <ShoppingBag className="w-4 h-4 text-[#C8102E]" />
                   <span>Store Pickup</span>
                 </span>
               </div>
@@ -54,11 +54,11 @@ export default function StoreHero() {
           {/* Right Food Imagery Column */}
           <div className="lg:col-span-5">
             <div className="relative mx-auto max-w-md lg:max-w-none">
-              <div className="aspect-[4/3] sm:aspect-[16/11] rounded-2xl overflow-hidden shadow-xl border border-[#E0D7C6] bg-slate-100">
+              <div className="aspect-[4/3] sm:aspect-[16/11] rounded-2xl overflow-hidden shadow-lg border border-[#EFE8DC] bg-slate-100">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src="https://images.unsplash.com/photo-1550547660-d9450f859349?w=900&auto=format&fit=crop&q=80"
-                  alt="Delicious gourmet burger and sides"
+                  alt="Delicious gourmet burger and street food assortment"
                   className="w-full h-full object-cover"
                 />
               </div>

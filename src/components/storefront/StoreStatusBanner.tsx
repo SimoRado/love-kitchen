@@ -23,10 +23,10 @@ export default function StoreStatusBanner({
 
   return (
     <div id="restaurant-info" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-6 sm:-mt-8 relative z-10 mb-8">
-      <div className="bg-white rounded-2xl border border-[#EBE3D5] shadow-sm p-4 sm:p-6">
+      <div className="bg-[#FAF7F0] rounded-2xl border border-[#EFE8DC] shadow-xs p-4 sm:p-6">
         {/* Closed Warning Banner if restaurant is closed */}
         {!openStatus.isOpen && (
-          <div className="mb-4 p-3.5 bg-amber-50/80 border border-amber-200 rounded-xl flex items-start gap-3 text-amber-900">
+          <div className="mb-4 p-3.5 bg-amber-50/90 border border-amber-200 rounded-xl flex items-start gap-3 text-amber-900">
             <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
             <div className="text-xs">
               <p className="font-semibold text-amber-950">
@@ -39,7 +39,7 @@ export default function StoreStatusBanner({
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 sm:divide-x sm:divide-slate-100">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 sm:divide-x sm:divide-[#E5DDD0]">
           {/* 1. Open Status */}
           <div className="flex items-center gap-3.5 pt-2 sm:pt-0">
             <div
@@ -54,14 +54,14 @@ export default function StoreStatusBanner({
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <span
-                  className={`text-xs font-semibold uppercase tracking-wider ${
+                  className={`text-xs font-bold uppercase tracking-wider ${
                     openStatus.isOpen ? "text-emerald-700" : "text-amber-700"
                   }`}
                 >
                   {openStatus.statusText}
                 </span>
               </div>
-              <p className="text-xs text-slate-500 font-normal truncate mt-0.5">
+              <p className="text-xs text-slate-600 font-normal truncate mt-0.5">
                 {openStatus.statusDetail}
               </p>
             </div>
@@ -69,11 +69,11 @@ export default function StoreStatusBanner({
 
           {/* 2. Delivery Fee */}
           <div className="flex items-center gap-3.5 pt-3 sm:pt-0 sm:pl-6">
-            <div className="w-10 h-10 rounded-xl bg-orange-50 text-primary border border-orange-200 flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-red-50 text-[#C8102E] border border-red-200 flex items-center justify-center shrink-0">
               <Bike className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-semibold text-slate-800">
+              <p className="text-xs font-bold text-slate-900">
                 Delivery Fee: {formatCurrency(settings.deliveryFee ?? 15, settings.currency)}
               </p>
               <p className="text-xs text-slate-500 font-normal truncate mt-0.5">
@@ -84,33 +84,33 @@ export default function StoreStatusBanner({
 
           {/* 3. Phone */}
           <div className="flex items-center gap-3.5 pt-3 sm:pt-0 sm:pl-6">
-            <div className="w-10 h-10 rounded-xl bg-slate-50 text-slate-600 border border-slate-200 flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-red-50 text-[#C8102E] border border-red-200 flex items-center justify-center shrink-0">
               <Phone className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-semibold text-slate-800">Direct Contact</p>
+              <p className="text-xs font-bold text-slate-900">Direct Contact</p>
               <a
                 href={`tel:${settings.phone}`}
-                className="text-xs text-primary font-medium hover:underline truncate block mt-0.5"
+                className="text-xs text-[#C8102E] font-bold hover:underline truncate block mt-0.5 focus-visible:ring-2 focus-visible:ring-[#C8102E] focus-visible:outline-none rounded"
               >
                 {settings.phone}
               </a>
             </div>
           </div>
 
-          {/* 4. Address (Clickable Google Maps Link) */}
+          {/* 4. Address */}
           <a
             href={mapsUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-3.5 pt-3 sm:pt-0 sm:pl-6 group hover:opacity-95 transition-opacity cursor-pointer"
+            className="flex items-center gap-3.5 pt-3 sm:pt-0 sm:pl-6 group hover:opacity-95 transition-opacity cursor-pointer focus-visible:ring-2 focus-visible:ring-[#C8102E] focus-visible:outline-none rounded-xl"
             title="Open restaurant location in Google Maps"
           >
-            <div className="w-10 h-10 rounded-xl bg-slate-50 text-slate-600 border border-slate-200 group-hover:border-primary/50 group-hover:text-primary group-hover:bg-orange-50/50 flex items-center justify-center shrink-0 transition-colors">
+            <div className="w-10 h-10 rounded-xl bg-red-50 text-[#C8102E] border border-red-200 group-hover:bg-red-100 flex items-center justify-center shrink-0 transition-colors">
               <MapPin className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-semibold text-slate-800 group-hover:text-primary transition-colors">
+              <p className="text-xs font-bold text-slate-900 group-hover:text-[#C8102E] transition-colors">
                 Restaurant Location
               </p>
               <p className="text-xs text-slate-500 font-normal line-clamp-1 mt-0.5">

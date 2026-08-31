@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ArrowRight } from "lucide-react";
+import { ShoppingBag } from "lucide-react";
 import { useCartStore } from "@/store/useCartStore";
 import { formatCurrency } from "@/lib/formatters";
 
@@ -23,22 +23,25 @@ export default function MobileCartBar({
   return (
     <div
       style={{ bottom: "calc(16px + env(safe-area-inset-bottom, 0px))" }}
-      className="fixed inset-x-4 z-40 lg:hidden animate-in slide-in-from-bottom-5 duration-200"
+      className="fixed inset-x-4 z-40 lg:hidden motion-reduce:transition-none"
     >
       <button
         onClick={onOpenCart}
-        className="w-full bg-primary hover:bg-primary-hover text-white py-3 px-5 rounded-2xl shadow-lg flex items-center justify-between font-medium text-sm transition-all active:scale-98 cursor-pointer"
+        aria-label={`View order tray with ${itemCount} items for ${formatCurrency(subtotal, currency)}`}
+        className="w-full bg-[#C8102E] hover:bg-[#B00D26] text-white py-3.5 px-5 rounded-2xl shadow-lg flex items-center justify-between font-bold text-sm transition-all active:scale-98 cursor-pointer focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none"
       >
         <div className="flex items-center gap-2.5">
-          <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-xs font-semibold">
+          <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-xs font-bold">
             {itemCount}
           </div>
-          <span>View Cart</span>
+          <span className="flex items-center gap-1.5">
+            <ShoppingBag className="w-4 h-4" />
+            <span>View Cart</span>
+          </span>
         </div>
 
-        <div className="flex items-center gap-2 font-semibold">
+        <div className="flex items-center gap-2 font-bold text-sm tracking-tight">
           <span>{formatCurrency(subtotal, currency)}</span>
-          <ArrowRight className="w-4 h-4" />
         </div>
       </button>
     </div>

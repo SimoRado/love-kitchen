@@ -22,13 +22,14 @@ export interface CalculatedOrderTotals {
 }
 
 export function calculateOrderTotals(
-  items: Array<{ price: number; quantity: number }>,
+  items: Array<{ price?: number; configuredUnitPrice?: number; quantity: number }>,
   orderType: "DELIVERY" | "PICKUP" | string,
   settingsDeliveryFee: number
 ): CalculatedOrderTotals {
   let subtotal = 0;
   for (const item of items) {
-    subtotal = roundMoney(subtotal + calculateItemTotal(item.price, item.quantity));
+    const itemUnitPrice = Number(item.configuredUnitPrice ?? item.price ?? 0);
+    subtotal = roundMoney(subtotal + calculateItemTotal(itemUnitPrice, item.quantity));
   }
 
   const isDelivery = String(orderType).toUpperCase() === "DELIVERY";

@@ -1,20 +1,32 @@
 @import "tailwindcss";
 
 :root {
-  /* Centralized Restaurant Brand Theme Palette */
-  --primary: #E85D04;
-  --primary-hover: #D04F00;
-  --primary-light: #FFF2EB;
+  /* ─────────────────────────────────────────────────────────────────
+   * CENTRALIZED RESTAURANT BRAND PALETTE (SIGNATURE RED THEME)
+   * ───────────────────────────────────────────────────────────────── */
+  --primary: #C8102E; /* Bold Signature Red from user mockup */
+  --primary-hover: #B00D26;
+  --primary-light: #FEECEF;
+  --primary-dark: #980A20;
   
-  --secondary: #F48C06;
-  --secondary-hover: #DE7B00;
-  --secondary-light: #FFF7ED;
+  --secondary: #D92323;
+  --secondary-hover: #BF1919;
+  --secondary-light: #FFF1F2;
   
-  --accent: #FAA307;
+  --accent: #F2B705;
   --accent-light: #FEF9C3;
-  --accent-hover: #E09000;
+  --accent-hover: #D9A404;
 
-  /* Neutrals & Surfaces */
+  /* Client Storefront Surfaces */
+  --client-red: #C8102E;
+  --client-red-hover: #B00D26;
+  --client-red-light: #FEECEF;
+  --client-bg: #FFFDF9;
+  --client-card-bg: #FAF7F0;
+  --client-card-border: #EFE8DC;
+  --client-pill-inactive: #F0ECE4;
+
+  /* Admin & Dashboard Neutrals & Surfaces (Untouched and clean) */
   --bg-main: #F8FAFC;
   --surface: #FFFFFF;
   --surface-hover: #F1F5F9;
@@ -48,6 +60,7 @@
   --color-primary: var(--primary);
   --color-primary-hover: var(--primary-hover);
   --color-primary-light: var(--primary-light);
+  --color-primary-dark: var(--primary-dark);
   
   --color-secondary: var(--secondary);
   --color-secondary-hover: var(--secondary-hover);
@@ -56,6 +69,10 @@
   --color-accent: var(--accent);
   --color-accent-light: var(--accent-light);
   --color-accent-hover: var(--accent-hover);
+
+  --color-client-red: var(--client-red);
+  --color-client-red-hover: var(--client-red-hover);
+  --color-client-red-light: var(--client-red-light);
 
   --color-bg-main: var(--bg-main);
   --color-surface: var(--surface);
@@ -94,4 +111,20 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
+}
+
+/* Accessibility: Respect prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

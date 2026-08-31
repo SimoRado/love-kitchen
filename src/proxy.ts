@@ -66,12 +66,11 @@ export async function proxy(request: NextRequest) {
 
   // 3. Admin Login Page (/admin/login)
   if (pathname === "/admin/login") {
-    if (hasAdminCookie) {
-      return withNoCache(NextResponse.redirect(new URL("/admin", request.url)));
-    }
-    if (hasPosCookie) {
+    // If the browser has ONLY a registered POS device cookie (and no admin session), isolate to /admin/pos
+    if (hasPosCookie && !hasAdminCookie) {
       return withNoCache(NextResponse.redirect(new URL("/admin/pos", request.url)));
     }
+    // Allow access to login form without unverified redirect loops
     return withNoCache(NextResponse.next());
   }
 

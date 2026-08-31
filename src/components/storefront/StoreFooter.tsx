@@ -10,7 +10,7 @@ interface StoreFooterProps {
 }
 
 export default function StoreFooter({ settings }: StoreFooterProps) {
-  const restaurantName = settings?.name || "Dark Kitchen";
+  const restaurantName = settings?.name || "Love Kitchen";
   const hours = settings?.openingHours || [];
   const mapsUrl = getRestaurantMapsUrl(settings);
   const displayAddress = settings?.address?.trim() || RESTAURANT_ADDRESS;
@@ -25,7 +25,7 @@ export default function StoreFooter({ settings }: StoreFooterProps) {
               {restaurantName}
             </h3>
             <p className="text-xs text-slate-400 leading-relaxed max-w-sm">
-              Artisanal restaurant offering freshly made burgers, pizzas, sides, and house desserts crafted with prime ingredients and fast delivery.
+              Artisanal kitchen offering freshly handcrafted burgers, pizzas, savory sides, and house desserts made from prime local ingredients.
             </p>
             <p className="text-xs text-slate-500">
               © {new Date().getFullYear()} {restaurantName}. All rights reserved.
@@ -35,7 +35,7 @@ export default function StoreFooter({ settings }: StoreFooterProps) {
           {/* Col 2: Weekly Schedule */}
           <div className="space-y-3">
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-100 flex items-center gap-1.5">
-              <Clock className="w-4 h-4 text-primary" />
+              <Clock className="w-4 h-4 text-[#C8102E]" />
               <span>Opening Schedule</span>
             </h4>
             <div className="space-y-1.5 text-xs text-slate-400">
@@ -53,22 +53,22 @@ export default function StoreFooter({ settings }: StoreFooterProps) {
           {/* Col 3: Contact & Address */}
           <div className="space-y-3">
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-100 flex items-center gap-1.5">
-              <MapPin className="w-4 h-4 text-primary" />
-              <span>Visit & Contact</span>
+              <MapPin className="w-4 h-4 text-[#C8102E]" />
+              <span>Visit &amp; Contact</span>
             </h4>
             <div className="space-y-2 text-xs text-slate-400">
               <a
                 href={mapsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="leading-relaxed text-slate-300 hover:text-primary transition-colors block"
+                className="leading-relaxed text-slate-300 hover:text-[#C8102E] transition-colors block"
               >
                 {displayAddress}
               </a>
               {settings?.phone && (
                 <p className="flex items-center gap-2 text-slate-300 font-semibold pt-1">
-                  <Phone className="w-3.5 h-3.5 text-primary" />
-                  <a href={`tel:${settings.phone}`} className="hover:text-primary transition-colors">
+                  <Phone className="w-3.5 h-3.5 text-[#C8102E]" />
+                  <a href={`tel:${settings.phone}`} className="hover:text-[#C8102E] transition-colors">
                     {settings.phone}
                   </a>
                 </p>

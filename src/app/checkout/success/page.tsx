@@ -16,8 +16,8 @@ function OrderSuccessContent() {
   const estimatedPrepMinutes = searchParams.get("estimatedPrepMinutes");
 
   return (
-    <div className="min-h-screen bg-[#FFFDF9] flex flex-col justify-center items-center px-4 py-12">
-      <div className="max-w-md w-full bg-white rounded-3xl border border-[#EBE3D5] p-8 shadow-xs text-center">
+    <div className="min-h-screen bg-[#FAF7F0] flex flex-col justify-center items-center px-4 py-12">
+      <div className="max-w-md w-full bg-white rounded-3xl border border-[#EFE8DC] p-8 shadow-xs text-center">
         {/* Success Icon */}
         <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center mx-auto mb-5 shadow-xs">
           <CheckCircle2 className="w-9 h-9" />
@@ -32,22 +32,22 @@ function OrderSuccessContent() {
 
         {/* Estimated Ready Time Card */}
         {estimatedReadyAt && (
-          <div className="my-5 p-4 bg-orange-50/80 border border-orange-200 rounded-2xl flex items-center justify-between text-orange-950 text-left">
+          <div className="my-5 p-4 bg-red-50/80 border border-red-200 rounded-2xl flex items-center justify-between text-red-950 text-left">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-orange-600 text-white flex items-center justify-center font-bold shrink-0 shadow-xs">
+              <div className="w-10 h-10 rounded-xl bg-[#C8102E] text-white flex items-center justify-center font-bold shrink-0 shadow-xs">
                 <Clock className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-wider text-orange-900">
-                  Prêt vers / Ready around
+                <p className="text-[11px] font-bold uppercase tracking-wider text-[#C8102E]">
+                  Ready around
                 </p>
-                <p className="text-base font-black text-orange-950 font-mono">
+                <p className="text-base font-black text-slate-900 font-mono">
                   {formatTime(estimatedReadyAt)}
                 </p>
               </div>
             </div>
             {estimatedPrepMinutes && (
-              <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-white border border-orange-200 text-orange-800 shadow-2xs font-mono">
+              <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-white border border-red-200 text-[#C8102E] shadow-2xs font-mono">
                 ~{estimatedPrepMinutes} min
               </span>
             )}
@@ -55,7 +55,7 @@ function OrderSuccessContent() {
         )}
 
         {/* Order Details Summary Box */}
-        <div className="my-5 p-4 rounded-2xl bg-slate-50 border border-slate-100 text-left space-y-2.5 text-xs">
+        <div className="my-5 p-4 rounded-2xl bg-[#FAF7F0] border border-[#EFE8DC] text-left space-y-2.5 text-xs">
           <div className="flex justify-between items-center text-slate-600">
             <span>Order Reference:</span>
             <span className="font-semibold text-slate-900 font-mono">{orderNumber}</span>
@@ -66,28 +66,28 @@ function OrderSuccessContent() {
             <span className="font-semibold text-slate-900 flex items-center gap-1.5">
               {orderType === "DELIVERY" ? (
                 <>
-                  <Truck className="w-3.5 h-3.5 text-primary" />
+                  <Truck className="w-3.5 h-3.5 text-[#C8102E]" />
                   <span>Delivery</span>
                 </>
               ) : (
                 <>
-                  <ShoppingBag className="w-3.5 h-3.5 text-primary" />
+                  <ShoppingBag className="w-3.5 h-3.5 text-[#C8102E]" />
                   <span>Pickup</span>
                 </>
               )}
             </span>
           </div>
 
-          <div className="flex justify-between items-center text-slate-600 pt-2 border-t border-slate-200">
+          <div className="flex justify-between items-center text-slate-600 pt-2 border-t border-[#E5DDD0]">
             <span>Total Payable:</span>
-            <span className="font-semibold text-base text-primary font-mono">
+            <span className="font-bold text-base text-[#C8102E] font-mono">
               {formatCurrency(total, currency)}
             </span>
           </div>
         </div>
 
         {/* Preparation notice */}
-        <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center gap-2.5 text-slate-700 text-xs mb-6 text-left">
+        <div className="p-3 bg-[#FAF7F0] border border-[#EFE8DC] rounded-xl flex items-center gap-2.5 text-slate-700 text-xs mb-6 text-left">
           <Clock className="w-4 h-4 text-slate-400 shrink-0" />
           <span className="font-normal text-[11px]">
             Our chefs are preparing your meal fresh. Pay upon delivery/pickup.
@@ -97,7 +97,7 @@ function OrderSuccessContent() {
         {/* Action Button */}
         <Link
           href="/"
-          className="w-full inline-flex items-center justify-center gap-2 py-3 px-5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-medium shadow-xs transition-colors cursor-pointer"
+          className="w-full inline-flex items-center justify-center gap-2 py-3.5 px-5 rounded-xl bg-[#C8102E] hover:bg-[#B00D26] text-white text-xs font-bold shadow-xs transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-[#C8102E] focus-visible:outline-none"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Back to Restaurant Menu</span>
@@ -109,7 +109,7 @@ function OrderSuccessContent() {
 
 export default function OrderSuccessPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#FFFDF9]" />}>
+    <Suspense fallback={<div className="min-h-screen bg-[#FAF7F0]" />}>
       <OrderSuccessContent />
     </Suspense>
   );

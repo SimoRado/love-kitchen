@@ -81,7 +81,7 @@ export async function verifyAdminSessionToken(
 
     // Check expiration
     if (session.expiresAt <= new Date()) {
-      await prisma.adminSession.delete({ where: { id: session.id } }).catch(() => {});
+      await prisma.adminSession.deleteMany({ where: { id: session.id } }).catch(() => {});
       return null;
     }
 
@@ -93,7 +93,7 @@ export async function verifyAdminSessionToken(
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
     if (session.lastActiveAt < fiveMinutesAgo) {
       await prisma.adminSession
-        .update({
+        .updateMany({
           where: { id: session.id },
           data: { lastActiveAt: new Date() },
         })
@@ -182,7 +182,7 @@ export async function invalidateSessionByToken(token: string | null | undefined)
   if (dotIndex < 1) return;
   const sessionId = token.slice(0, dotIndex);
   try {
-    await prisma.adminSession.delete({ where: { id: sessionId } }).catch(() => {});
+    await prisma.adminSession.deleteMany({ where: { id: sessionId } });
   } catch {}
 }
 

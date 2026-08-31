@@ -101,63 +101,74 @@ export default function CheckoutPage() {
     loadData();
   }, [loadData]);
 
-  // Dynamic kitchen preparation estimate preview
+  // Dynamic Kitchen Preparation Time Estimation
   useEffect(() => {
+    let isCancelled = false;
+
     if (items.length === 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset estimate when cart is empty
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear estimate when empty
       setPrepEstimate(null);
       return;
     }
 
-    let isMounted = true;
+    const payload = {
+      orderType,
+      items: items.map((i) => ({
+        productId: i.product.id,
+        quantity: i.quantity,
+      })),
+    };
+
     fetch("/api/orders/estimate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        items: items.map((it) => ({
-          productId: it.product.id,
-          quantity: it.quantity,
-        })),
-      }),
+      body: JSON.stringify(payload),
     })
       .then((res) => res.json())
       .then((data) => {
-        if (isMounted && data.success && data.data) {
+        if (!isCancelled && data.success && data.data) {
           setPrepEstimate(data.data);
         }
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.error("Estimation fetch error:", err);
+      });
 
     return () => {
-      isMounted = false;
+      isCancelled = true;
     };
-  }, [items]);
+  }, [items, orderType]);
 
   const openStatus: RestaurantOpenStatus = checkRestaurantOpen(settings);
   const currency = settings?.currency || "MAD";
   const settingsDeliveryFee = settings?.deliveryFee ?? 15;
 
   const { subtotal, deliveryFee, total } = calculateOrderTotals(
-    items.map((it) => ({ price: it.configuredUnitPrice, quantity: it.quantity })),
+    items,
     orderType,
     settingsDeliveryFee
   );
 
   const hasUnavailable = hasUnavailableItems();
 
-  const validateForm = () => {
+  const validateForm = (): boolean => {
     const errors: { [key: string]: string } = {};
 
     if (!name.trim()) {
-      errors.name = "Full name is required.";
+      errors.name = "Please enter your full name.";
     }
 
     if (!phone.trim()) {
-      errors.phone = "Phone number is required.";
+      errors.phone = "Please enter your phone number.";
+    } else {
+      const cleanPhone = phone.replace(/[\s\-().]/g, "");
+      if (cleanPhone.length < 8) {
+        errors.phone = "Please enter a valid contact phone number.";
+      }
     }
 
     if (orderType === "DELIVERY" && !address.trim()) {
-      errors.address = "Delivery street address is required.";
+      errors.address = "Please enter your delivery street address.";
     }
 
     setFormErrors(errors);
@@ -166,9 +177,9 @@ export default function CheckoutPage() {
 
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMessage("");
+    if (submissionLock.current || isSubmitting) return;
 
-    if (!validateForm() || isSubmitting || submissionLock.current) return;
+    setErrorMessage("");
 
     if (!openStatus.isOpen) {
       setErrorMessage(
@@ -177,44 +188,48 @@ export default function CheckoutPage() {
       return;
     }
 
-    if (items.length === 0) {
-      setErrorMessage("Your cart is empty. Please add items to checkout.");
-      return;
-    }
-
     if (hasUnavailable) {
       setErrorMessage(
-        "One or more items in your cart are currently sold out or have unavailable options. Please update them to proceed."
+        "One or more items in your cart are currently sold out. Please remove them to continue."
       );
       return;
     }
 
+    if (!validateForm()) {
+      return;
+    }
+
+    // Save customer info to persistent cart store
+    setCustomerInfo({
+      customerName: name.trim(),
+      customerPhone: phone.trim(),
+      customerAddress: orderType === "DELIVERY" ? address.trim() : "",
+      allergies: allergies.trim(),
+      notes: notes.trim(),
+    });
+
     try {
-      setIsSubmitting(true);
       submissionLock.current = true;
-      idempotencyKey.current ??= crypto.randomUUID();
+      setIsSubmitting(true);
 
-      // Save customer info to cart store
-      setCustomerInfo({
-        customerName: name.trim(),
-        customerPhone: phone.trim(),
-        customerAddress: address.trim(),
-        allergies: allergies.trim(),
-        notes: notes.trim(),
-      });
+      if (!idempotencyKey.current) {
+        idempotencyKey.current = `web-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      }
 
+      // Map cart items into the robust order submission payload
       const orderPayload = {
         customerName: name.trim(),
         customerPhone: phone.trim(),
         customerAddress: orderType === "DELIVERY" ? address.trim() : null,
-        orderType,
         allergies: allergies.trim() || null,
         notes: notes.trim() || null,
+        orderType,
+        total,
         idempotencyKey: idempotencyKey.current,
-        items: items.map((it) => ({
-          productId: it.product.id,
-          quantity: it.quantity,
-          selectedModifierOptionIds: (it.selectedModifiers || []).map((m) => m.optionId),
+        items: items.map((item) => ({
+          productId: item.product.id,
+          quantity: item.quantity,
+          selectedModifierOptionIds: item.selectedModifiers.map((m) => m.optionId),
         })),
       };
 
@@ -226,53 +241,58 @@ export default function CheckoutPage() {
 
       const data = await res.json();
 
-      if (data.success && data.data) {
-        // Clear cart upon successful order creation
-        clearCart();
-        idempotencyKey.current = null;
-
-        // Route to order confirmation success screen
-        router.push(
-          `/checkout/success?orderNumber=${encodeURIComponent(
-            data.data.orderNumber
-          )}&type=${encodeURIComponent(
-            data.data.orderType
-          )}&total=${encodeURIComponent(
-            data.data.total
-          )}&currency=${encodeURIComponent(currency)}&estimatedReadyAt=${encodeURIComponent(
-            data.data.estimatedReadyAt || ""
-          )}&estimatedPrepMinutes=${encodeURIComponent(
-            data.data.estimatedPrepMinutes ? String(data.data.estimatedPrepMinutes) : ""
-          )}`
-        );
-      } else {
-        setErrorMessage(
-          data.error || "Could not place your order. Please try again."
-        );
+      if (!res.ok || !data.success) {
+        // If items are unavailable, refresh products list
+        if (res.status === 409) {
+          const prodRes = await fetch("/api/products");
+          const prodData = await prodRes.json();
+          if (prodData.success && prodData.data) {
+            reconcileWithLatestProducts(prodData.data);
+          }
+        }
+        throw new Error(data.error || "Failed to submit your order. Please try again.");
       }
-    } catch (err) {
-      console.error("Order submission network error:", err);
-      setErrorMessage(
-        "Network error connecting to restaurant. Please check your connection and try again."
-      );
-    } finally {
+
+      // Clear cart on successful order creation
+      clearCart();
       submissionLock.current = false;
+
+      // Navigate to order success screen
+      const orderNumber = data.data.orderNumber;
+      const readyAt = data.data.estimatedReadyAt || "";
+      const prepMin = data.data.estimatedPrepMinutes || "";
+      router.push(
+        `/checkout/success?orderNumber=${encodeURIComponent(
+          orderNumber
+        )}&type=${orderType}&total=${total}&currency=${encodeURIComponent(
+          currency
+        )}&estimatedReadyAt=${encodeURIComponent(
+          readyAt
+        )}&estimatedPrepMinutes=${encodeURIComponent(prepMin)}`
+      );
+    } catch (err) {
+      console.error("Order submit error:", err);
+      setErrorMessage(
+        err instanceof Error ? err.message : "An unexpected error occurred. Please try again."
+      );
+      submissionLock.current = false;
+    } finally {
       setIsSubmitting(false);
     }
   };
 
   if (!hasHydrated) {
     return (
-      <div className="min-h-screen bg-[#FFFDF9] flex items-center justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-primary" aria-label="Loading cart" />
+      <div className="min-h-screen bg-[#FAF7F0] flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-[#C8102E]" aria-label="Loading cart" />
       </div>
     );
   }
 
   if (items.length === 0 && !isSubmitting) {
     return (
-      <div className="min-h-screen bg-[#FFFDF9] flex flex-col justify-center items-center p-6 text-center">
-        <div className="max-w-md bg-white rounded-2xl border border-[#EBE3D5] p-8 shadow-xs">
+      <div className="min-h-screen bg-[#FAF7F0] flex flex-col justify-center items-center p-6 text-center">
+        <div className="max-w-md bg-white rounded-2xl border border-[#EFE8DC] p-8 shadow-xs">
           <ShoppingBag className="w-12 h-12 text-slate-300 mx-auto mb-3" />
           <h2 className="text-lg font-bold text-slate-900 font-serif">
             Your Cart is Empty
@@ -282,7 +302,7 @@ export default function CheckoutPage() {
           </p>
           <Link
             href="/"
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-medium shadow-xs transition-colors"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#C8102E] hover:bg-[#B00D26] text-white text-xs font-bold shadow-xs transition-colors focus-visible:ring-2 focus-visible:ring-[#C8102E] focus-visible:outline-none"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Return to Menu</span>
@@ -293,20 +313,20 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FFFDF9] text-slate-900 flex flex-col antialiased">
-      {/* Checkout Navbar */}
-      <header className="sticky top-0 z-30 bg-[#FFFDF9]/95 backdrop-blur-md border-b border-[#EBE3D5]">
+    <div className="min-h-screen bg-[#FAF7F0] text-slate-900 flex flex-col antialiased">
+      {/* Checkout Navbar: Solid Red Bar */}
+      <header className="sticky top-0 z-30 bg-[#C8102E] text-white shadow-sm">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <Link
             href="/"
-            className="inline-flex items-center gap-2 text-xs font-medium text-slate-600 hover:text-primary transition-colors"
+            className="inline-flex items-center gap-2 text-xs font-bold text-white hover:text-white/80 transition-colors focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none rounded py-1 px-2"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Back to Menu</span>
           </Link>
 
-          <span className="font-bold text-base text-slate-900 font-serif">
-            {settings?.name || "Dark Kitchen"} • Checkout
+          <span className="font-bold text-base text-white font-serif">
+            {settings?.name || "Love Kitchen"} • Checkout
           </span>
 
           <div className="w-16" />
@@ -357,8 +377,8 @@ export default function CheckoutPage() {
           {/* Left Column: Fulfillment & Customer Details (7 cols) */}
           <div className="lg:col-span-7 space-y-6">
             {/* 1. Fulfillment Type Selection */}
-            <div className="bg-white rounded-2xl border border-[#EBE3D5] p-5 sm:p-6 shadow-xs space-y-4">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-700">
+            <div className="bg-white rounded-2xl border border-[#EFE8DC] p-5 sm:p-6 shadow-xs space-y-4">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800">
                 1. Order Fulfillment
               </h2>
 
@@ -367,26 +387,26 @@ export default function CheckoutPage() {
                 <button
                   type="button"
                   onClick={() => setOrderType("DELIVERY")}
-                  className={`p-4 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer ${
+                  className={`p-4 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer focus-visible:ring-2 focus-visible:ring-[#C8102E] focus-visible:outline-none ${
                     orderType === "DELIVERY"
-                      ? "border-primary bg-orange-50/50 ring-2 ring-primary/20"
-                      : "border-[#E8DFD1] hover:bg-slate-50"
+                      ? "border-[#C8102E] bg-red-50/50 ring-2 ring-[#C8102E]/20"
+                      : "border-[#EFE8DC] hover:bg-slate-50"
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <Truck
                       className={`w-5 h-5 ${
                         orderType === "DELIVERY"
-                          ? "text-primary"
+                          ? "text-[#C8102E]"
                           : "text-slate-400"
                       }`}
                     />
                     {orderType === "DELIVERY" && (
-                      <CheckCircle2 className="w-4 h-4 text-primary" />
+                      <CheckCircle2 className="w-4 h-4 text-[#C8102E]" />
                     )}
                   </div>
                   <div className="mt-3">
-                    <p className="text-xs font-semibold text-slate-900">Delivery</p>
+                    <p className="text-xs font-bold text-slate-900">Delivery</p>
                     <p className="text-[11px] text-slate-500 font-normal mt-0.5">
                       Fee: {formatCurrency(settingsDeliveryFee, currency)}
                     </p>
@@ -397,27 +417,27 @@ export default function CheckoutPage() {
                 <button
                   type="button"
                   onClick={() => setOrderType("PICKUP")}
-                  className={`p-4 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer ${
+                  className={`p-4 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer focus-visible:ring-2 focus-visible:ring-[#C8102E] focus-visible:outline-none ${
                     orderType === "PICKUP"
-                      ? "border-primary bg-orange-50/50 ring-2 ring-primary/20"
-                      : "border-[#E8DFD1] hover:bg-slate-50"
+                      ? "border-[#C8102E] bg-red-50/50 ring-2 ring-[#C8102E]/20"
+                      : "border-[#EFE8DC] hover:bg-slate-50"
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <ShoppingBag
                       className={`w-5 h-5 ${
                         orderType === "PICKUP"
-                          ? "text-primary"
+                          ? "text-[#C8102E]"
                           : "text-slate-400"
                       }`}
                     />
                     {orderType === "PICKUP" && (
-                      <CheckCircle2 className="w-4 h-4 text-primary" />
+                      <CheckCircle2 className="w-4 h-4 text-[#C8102E]" />
                     )}
                   </div>
                   <div className="mt-3">
-                    <p className="text-xs font-semibold text-slate-900">Pickup</p>
-                    <p className="text-[11px] text-emerald-600 font-medium mt-0.5">
+                    <p className="text-xs font-bold text-slate-900">Pickup</p>
+                    <p className="text-[11px] text-emerald-600 font-bold mt-0.5">
                       Free (0.00)
                     </p>
                   </div>
@@ -426,16 +446,16 @@ export default function CheckoutPage() {
             </div>
 
             {/* 2. Customer Contact Information */}
-            <div className="bg-white rounded-2xl border border-[#EBE3D5] p-5 sm:p-6 shadow-xs space-y-4">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-700">
+            <div className="bg-white rounded-2xl border border-[#EFE8DC] p-5 sm:p-6 shadow-xs space-y-4">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800">
                 2. Customer Information
               </h2>
 
               <div className="space-y-4">
                 {/* Name */}
                 <div>
-                  <label className="block text-xs font-medium uppercase tracking-wider text-slate-600 mb-1.5">
-                    Your Full Name <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Your Full Name <span className="text-[#C8102E]">*</span>
                   </label>
                   <div className="relative">
                     <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -447,10 +467,10 @@ export default function CheckoutPage() {
                         if (formErrors.name) setFormErrors({ ...formErrors, name: "" });
                       }}
                       placeholder="e.g. Sarah Mansouri"
-                      className={`w-full pl-10 pr-3.5 py-2.5 rounded-xl border text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors ${
+                      className={`w-full pl-10 pr-3.5 py-2.5 rounded-xl border text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/20 transition-colors ${
                         formErrors.name
                           ? "border-red-400 focus:border-red-500"
-                          : "border-[#E8DFD1] focus:border-primary"
+                          : "border-[#EFE8DC] focus:border-[#C8102E]"
                       }`}
                     />
                   </div>
@@ -461,8 +481,8 @@ export default function CheckoutPage() {
 
                 {/* Phone */}
                 <div>
-                  <label className="block text-xs font-medium uppercase tracking-wider text-slate-600 mb-1.5">
-                    Phone Number <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Phone Number <span className="text-[#C8102E]">*</span>
                   </label>
                   <div className="relative">
                     <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -474,10 +494,10 @@ export default function CheckoutPage() {
                         if (formErrors.phone) setFormErrors({ ...formErrors, phone: "" });
                       }}
                       placeholder="e.g. +212 661 123456"
-                      className={`w-full pl-10 pr-3.5 py-2.5 rounded-xl border text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors ${
+                      className={`w-full pl-10 pr-3.5 py-2.5 rounded-xl border text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/20 transition-colors ${
                         formErrors.phone
                           ? "border-red-400 focus:border-red-500"
-                          : "border-[#E8DFD1] focus:border-primary"
+                          : "border-[#EFE8DC] focus:border-[#C8102E]"
                       }`}
                     />
                   </div>
@@ -489,8 +509,8 @@ export default function CheckoutPage() {
                 {/* Delivery Address (only for Delivery) */}
                 {orderType === "DELIVERY" && (
                   <div>
-                    <label className="block text-xs font-medium uppercase tracking-wider text-slate-600 mb-1.5">
-                      Delivery Street Address <span className="text-red-500">*</span>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                      Delivery Street Address <span className="text-[#C8102E]">*</span>
                     </label>
                     <div className="relative">
                       <MapPin className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
@@ -502,10 +522,10 @@ export default function CheckoutPage() {
                           if (formErrors.address) setFormErrors({ ...formErrors, address: "" });
                         }}
                         placeholder="Street, building, apartment/floor number..."
-                        className={`w-full pl-10 pr-3.5 py-2.5 rounded-xl border text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors resize-none ${
+                        className={`w-full pl-10 pr-3.5 py-2.5 rounded-xl border text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/20 transition-colors resize-none ${
                           formErrors.address
                             ? "border-red-400 focus:border-red-500"
-                            : "border-[#E8DFD1] focus:border-primary"
+                            : "border-[#EFE8DC] focus:border-[#C8102E]"
                         }`}
                       />
                     </div>
@@ -517,7 +537,7 @@ export default function CheckoutPage() {
 
                 {/* Allergies */}
                 <div>
-                  <label className="block text-xs font-medium uppercase tracking-wider text-slate-600 mb-1.5">
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
                     Allergies (Optional)
                   </label>
                   <div className="relative">
@@ -527,14 +547,14 @@ export default function CheckoutPage() {
                       value={allergies}
                       onChange={(e) => setAllergies(e.target.value)}
                       placeholder="e.g. peanuts, dairy, shellfish..."
-                      className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#E8DFD1] text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors resize-none"
+                      className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#EFE8DC] text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/20 focus:border-[#C8102E] transition-colors resize-none"
                     />
                   </div>
                 </div>
 
                 {/* Order Notes */}
                 <div>
-                  <label className="block text-xs font-medium uppercase tracking-wider text-slate-600 mb-1.5">
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
                     Special Instructions / Notes (Optional)
                   </label>
                   <div className="relative">
@@ -544,7 +564,7 @@ export default function CheckoutPage() {
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
                       placeholder="e.g. Extra napkins, please do not ring the bell..."
-                      className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#E8DFD1] text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors resize-none"
+                      className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#EFE8DC] text-xs bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/20 focus:border-[#C8102E] transition-colors resize-none"
                     />
                   </div>
                 </div>
@@ -554,8 +574,8 @@ export default function CheckoutPage() {
 
           {/* Right Column: Order Summary & Placement (5 cols) */}
           <div className="lg:col-span-5 space-y-5">
-            <div className="bg-white rounded-2xl border border-[#EBE3D5] p-5 sm:p-6 shadow-xs space-y-4 sticky top-24">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-700 pb-3 border-b border-slate-100">
+            <div className="bg-white rounded-2xl border border-[#EFE8DC] p-5 sm:p-6 shadow-xs space-y-4 sticky top-24">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800 pb-3 border-b border-slate-100">
                 Order Summary
               </h2>
 
@@ -593,7 +613,7 @@ export default function CheckoutPage() {
                         </span>
 
                         {selectedModifiers.length > 0 && (
-                          <div className="mt-1 space-y-0.5 text-[11px] text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                          <div className="mt-1 space-y-0.5 text-[11px] text-slate-600 bg-[#FAF7F0] p-2 rounded-lg border border-[#EFE8DC]">
                             {Object.entries(groupedModifiers).map(([groupName, optionsList]) => (
                               <p key={groupName} className="leading-snug">
                                 <span className="font-medium text-slate-700">{groupName}: </span>
@@ -604,7 +624,7 @@ export default function CheckoutPage() {
                         )}
                       </div>
 
-                      <span className="font-semibold text-slate-900 shrink-0">
+                      <span className="font-bold text-slate-900 shrink-0">
                         {formatCurrency(itemTotal, currency)}
                       </span>
                     </div>
@@ -614,18 +634,18 @@ export default function CheckoutPage() {
 
               {/* Dynamic Kitchen Preparation Estimate */}
               {prepEstimate && (
-                <div className="bg-orange-50/70 border border-orange-200/80 rounded-xl p-3.5 space-y-1">
+                <div className="bg-red-50/70 border border-red-200/80 rounded-xl p-3.5 space-y-1">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-xs font-bold text-orange-950">
-                      <Clock className="w-3.5 h-3.5 text-orange-600 shrink-0" />
-                      <span>Prêt vers {formatTime(prepEstimate.estimatedReadyAt)}</span>
+                    <div className="flex items-center gap-2 text-xs font-bold text-red-950">
+                      <Clock className="w-3.5 h-3.5 text-[#C8102E] shrink-0" />
+                      <span>Ready by {formatTime(prepEstimate.estimatedReadyAt)}</span>
                     </div>
-                    <span className="text-[11px] font-bold text-orange-800 bg-white px-2 py-0.5 rounded-md border border-orange-200 shadow-2xs font-mono">
+                    <span className="text-[11px] font-bold text-[#C8102E] bg-white px-2 py-0.5 rounded-md border border-red-200 shadow-2xs font-mono">
                       ~{prepEstimate.estimatedPrepMinutes} min
                     </span>
                   </div>
                   <p className="text-[10px] text-slate-500 font-medium">
-                    Temps estimé — peut varier selon l&apos;activité en cuisine.
+                    Estimated kitchen preparation time.
                   </p>
                 </div>
               )}
@@ -634,23 +654,23 @@ export default function CheckoutPage() {
               <div className="pt-3 border-t border-slate-100 space-y-2 text-xs">
                 <div className="flex justify-between text-slate-600">
                   <span>Subtotal</span>
-                  <span className="font-semibold text-slate-900">
+                  <span className="font-bold text-slate-900">
                     {formatCurrency(subtotal, currency)}
                   </span>
                 </div>
 
                 <div className="flex justify-between text-slate-600">
                   <span>Delivery ({orderType === "DELIVERY" ? "Standard" : "Pickup"})</span>
-                  <span className="font-semibold text-slate-900">
+                  <span className="font-bold text-slate-900">
                     {orderType === "DELIVERY"
                       ? formatCurrency(deliveryFee, currency)
                       : "Free (0.00)"}
                   </span>
                 </div>
 
-                <div className="flex justify-between text-sm font-semibold text-slate-900 pt-3 border-t border-slate-200">
+                <div className="flex justify-between text-sm font-bold text-slate-900 pt-3 border-t border-slate-200">
                   <span>Total Amount</span>
-                  <span className="text-primary font-semibold text-base">
+                  <span className="text-[#C8102E] font-bold text-base">
                     {formatCurrency(total, currency)}
                   </span>
                 </div>
@@ -660,10 +680,10 @@ export default function CheckoutPage() {
               <button
                 type="submit"
                 disabled={isSubmitting || !openStatus.isOpen || hasUnavailable}
-                className={`w-full flex items-center justify-center gap-2 py-3 px-5 rounded-xl font-medium text-xs uppercase tracking-wider shadow-xs transition-all text-white cursor-pointer ${
+                className={`w-full flex items-center justify-center gap-2 py-3.5 px-5 rounded-xl font-bold text-xs shadow-xs transition-all text-white cursor-pointer focus-visible:ring-2 focus-visible:ring-[#C8102E] focus-visible:outline-none ${
                   isSubmitting || !openStatus.isOpen || hasUnavailable
                     ? "bg-slate-300 cursor-not-allowed opacity-70"
-                    : "bg-primary hover:bg-primary-hover active:scale-98"
+                    : "bg-[#C8102E] hover:bg-[#B00D26] active:scale-98"
                 }`}
               >
                 {isSubmitting ? (
