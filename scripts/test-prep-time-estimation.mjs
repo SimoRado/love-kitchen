@@ -51,6 +51,12 @@ async function run() {
 
   await loginAdmin();
 
+  const originalSettings = await prisma.restaurantSettings.findUnique({ where: { id: "default" } });
+  await prisma.restaurantSettings.update({
+    where: { id: "default" },
+    data: { isOpenOverride: true },
+  });
+
   // Clean any leftover active orders for deterministic test baseline
   const initialOrdersRes = await fetch(`${BASE_URL}/api/orders`, { headers: { Cookie: adminCookie } });
   const initialOrdersData = await initialOrdersRes.json();
@@ -342,6 +348,13 @@ async function run() {
     });
   }
   pass("Cleaned up test products");
+
+  if (originalSettings) {
+    await prisma.restaurantSettings.update({
+      where: { id: "default" },
+      data: { isOpenOverride: originalSettings.isOpenOverride },
+    }).catch(() => {});
+  }
 
   console.log("==================================================");
   console.log("ALL KITCHEN PREPARATION ESTIMATION CHECKS PASSED!");

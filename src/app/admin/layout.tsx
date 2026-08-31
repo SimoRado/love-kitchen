@@ -27,14 +27,7 @@ export default function AdminLayout({
       if (!res.ok) {
         // Clear stale session cookie before redirecting
         await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
-
-        // If not a valid admin, check if this is a registered POS device
-        const hasPosDeviceCookie = document.cookie.includes("resto_pos_device=");
-        if (hasPosDeviceCookie) {
-          window.location.replace("/admin/pos");
-        } else {
-          window.location.replace("/admin/login");
-        }
+        window.location.replace("/admin/login");
       }
     } catch {
       // Network error — don't redirect, let the page stay

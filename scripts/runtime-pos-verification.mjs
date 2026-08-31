@@ -164,9 +164,16 @@ async function registerDevice(jar, code, expectedOk = true) {
 }
 
 async function main() {
+  let originalSettings = null;
   try {
     const adminPassword = loadEnvValue("ADMIN_PASSWORD");
     assert(Boolean(adminPassword), "Admin password loaded from env");
+
+    originalSettings = await prisma.restaurantSettings.findUnique({ where: { id: "default" } });
+    await prisma.restaurantSettings.update({
+      where: { id: "default" },
+      data: { isOpenOverride: true },
+    });
 
     // Clean any leftover test records
     await prisma.deviceRegistrationCode.deleteMany({});
@@ -247,19 +254,19 @@ async function main() {
 
     // 6. POS Terminal Role Hardening Checks: POS-01 cannot access Admin Routes or APIs
     const pos01ToAdmin = await req("/admin", { jar: pos01Jar });
-    assert(pos01ToAdmin.status === 307 && pos01ToAdmin.location?.includes("/admin/pos"), "Registered POS-01 navigating to /admin is redirected to /admin/pos");
+    assert(pos01ToAdmin.status === 307 && pos01ToAdmin.location?.includes("/admin/login"), "Registered POS-01 navigating to /admin is redirected to /admin/login");
 
     const pos01ToProducts = await req("/admin/products", { jar: pos01Jar });
-    assert(pos01ToProducts.status === 307 && pos01ToProducts.location?.includes("/admin/pos"), "Registered POS-01 navigating to /admin/products is redirected to /admin/pos");
+    assert(pos01ToProducts.status === 307 && pos01ToProducts.location?.includes("/admin/login"), "Registered POS-01 navigating to /admin/products is redirected to /admin/login");
 
     const pos01ToSettings = await req("/admin/settings", { jar: pos01Jar });
-    assert(pos01ToSettings.status === 307 && pos01ToSettings.location?.includes("/admin/pos"), "Registered POS-01 navigating to /admin/settings is redirected to /admin/pos");
+    assert(pos01ToSettings.status === 307 && pos01ToSettings.location?.includes("/admin/login"), "Registered POS-01 navigating to /admin/settings is redirected to /admin/login");
 
     const pos01ToDevices = await req("/admin/devices", { jar: pos01Jar });
-    assert(pos01ToDevices.status === 307 && pos01ToDevices.location?.includes("/admin/pos"), "Registered POS-01 navigating to /admin/devices is redirected to /admin/pos");
+    assert(pos01ToDevices.status === 307 && pos01ToDevices.location?.includes("/admin/login"), "Registered POS-01 navigating to /admin/devices is redirected to /admin/login");
 
     const pos01ToLogin = await req("/admin/login", { jar: pos01Jar });
-    assert(pos01ToLogin.status === 307 && pos01ToLogin.location?.includes("/admin/pos"), "Registered POS-01 navigating to /admin/login is redirected to /admin/pos");
+    assert(pos01ToLogin.status === 200, "Registered POS-01 navigating to /admin/login loads login view directly (200 OK)");
 
     const pos01CallAdminApi = await req("/api/devices", { jar: pos01Jar });
     assert(pos01CallAdminApi.status === 403 || pos01CallAdminApi.status === 401, "Registered POS-01 cannot call admin API /api/devices (401/403)");
@@ -433,6 +440,12 @@ async function main() {
     console.log(`SUMMARY: ALL ${results.filter((r) => r.ok).length} POS ISOLATION, SECURITY & MULTI-POS CHECKS PASSED!`);
     console.log(`========================================\n`);
   } finally {
+    if (originalSettings) {
+      await prisma.restaurantSettings.update({
+        where: { id: "default" },
+        data: { isOpenOverride: originalSettings.isOpenOverride },
+      }).catch(() => {});
+    }
     await prisma.$disconnect();
   }
 }

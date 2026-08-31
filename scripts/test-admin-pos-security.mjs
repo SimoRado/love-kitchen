@@ -350,34 +350,34 @@ async function main() {
     assert(reopenedPosOrders.status === 200 && Array.isArray(reopenedPosOrders.json?.data), "POS-01 remains registered after simulated restart (orders accessible directly)");
 
     // ─────────────────────────────────────────────────────────────────
-    // SECTION 4: POS TERMINAL ISOLATION & SECURITY HARDENING
+    // SECTION 4: POS TERMINAL ISOLATION & DECOUPLED AUTHENTICATION
     // ─────────────────────────────────────────────────────────────────
-    console.log("\n--- 4. Testing POS Terminal Isolation ---");
+    console.log("\n--- 4. Testing POS Terminal Isolation & Independent Authentication ---");
 
-    // POS navigation redirects to /admin/pos
+    // POS cookie only: visiting /admin & sub-routes redirects to /admin/login (NOT /admin/pos)
     const posToAdmin = await req("/admin", { jar: pos01Jar });
-    assert(posToAdmin.status === 307 && posToAdmin.location?.includes("/admin/pos"), "POS visiting /admin redirects to /admin/pos");
+    assert(posToAdmin.status === 307 && posToAdmin.location?.includes("/admin/login"), "POS visiting /admin redirects to /admin/login (NOT /admin/pos)");
 
     const posToProducts = await req("/admin/products", { jar: pos01Jar });
-    assert(posToProducts.status === 307 && posToProducts.location?.includes("/admin/pos"), "POS visiting /admin/products redirects to /admin/pos");
+    assert(posToProducts.status === 307 && posToProducts.location?.includes("/admin/login"), "POS visiting /admin/products redirects to /admin/login");
 
     const posToCategories = await req("/admin/categories", { jar: pos01Jar });
-    assert(posToCategories.status === 307 && posToCategories.location?.includes("/admin/pos"), "POS visiting /admin/categories redirects to /admin/pos");
+    assert(posToCategories.status === 307 && posToCategories.location?.includes("/admin/login"), "POS visiting /admin/categories redirects to /admin/login");
 
     const posToSettings = await req("/admin/settings", { jar: pos01Jar });
-    assert(posToSettings.status === 307 && posToSettings.location?.includes("/admin/pos"), "POS visiting /admin/settings redirects to /admin/pos");
+    assert(posToSettings.status === 307 && posToSettings.location?.includes("/admin/login"), "POS visiting /admin/settings redirects to /admin/login");
 
     const posToOrders = await req("/admin/orders", { jar: pos01Jar });
-    assert(posToOrders.status === 307 && posToOrders.location?.includes("/admin/pos"), "POS visiting /admin/orders redirects to /admin/pos");
+    assert(posToOrders.status === 307 && posToOrders.location?.includes("/admin/login"), "POS visiting /admin/orders redirects to /admin/login");
 
     const posToDevices = await req("/admin/devices", { jar: pos01Jar });
-    assert(posToDevices.status === 307 && posToDevices.location?.includes("/admin/pos"), "POS visiting /admin/devices redirects to /admin/pos");
+    assert(posToDevices.status === 307 && posToDevices.location?.includes("/admin/login"), "POS visiting /admin/devices redirects to /admin/login");
 
     const posToSecurity = await req("/admin/security", { jar: pos01Jar });
-    assert(posToSecurity.status === 307 && posToSecurity.location?.includes("/admin/pos"), "POS visiting /admin/security redirects to /admin/pos");
+    assert(posToSecurity.status === 307 && posToSecurity.location?.includes("/admin/login"), "POS visiting /admin/security redirects to /admin/login");
 
     const posToLogin = await req("/admin/login", { jar: pos01Jar });
-    assert(posToLogin.status === 307 && posToLogin.location?.includes("/admin/pos"), "POS visiting /admin/login redirects to /admin/pos");
+    assert(posToLogin.status === 200, "POS visiting /admin/login loads login page (200 OK, not redirected to POS)");
 
     // POS cannot call Admin APIs without admin session
     const posCallDevicesApi = await req("/api/devices", { jar: pos01Jar });
@@ -415,7 +415,7 @@ async function main() {
 
     // Admin routes on dual browser render Admin Dashboard & Sub-pages
     const dualAdmin = await req("/admin", { jar: dualJar });
-    assert(dualAdmin.status === 200, "Dual browser visiting /admin sees Admin Dashboard (200 OK, NOT redirected to /admin/pos)");
+    assert(dualAdmin.status === 200, "Dual browser visiting /admin sees Admin Dashboard (200 OK)");
 
     const dualProducts = await req("/admin/products", { jar: dualJar });
     assert(dualProducts.status === 200, "Dual browser visiting /admin/products sees Admin Products (200 OK)");
@@ -440,21 +440,37 @@ async function main() {
     const dualPosApi = await req("/api/pos/orders", { jar: dualJar });
     assert(dualPosApi.status === 200 && Array.isArray(dualPosApi.json?.data), "Dual browser can access POS APIs (GET /api/pos/orders)");
 
-    // Admin session expiration simulation on dual browser
-    const expiredDualJar = pos01Jar.clone("expired-admin-pos-browser");
-    expiredDualJar.cookies.set("resto_admin_session", "invalid-expired-token-xyz");
+    // ─────────────────────────────────────────────────────────────────
+    // EXPLICIT COOKIE DELETION & RE-AUTHENTICATION TESTS
+    // ─────────────────────────────────────────────────────────────────
+    console.log("\n--- Testing Explicit Admin Cookie Deletion & Re-Authentication ---");
+    const cookieDeleteJar = dualJar.clone("cookie-delete-browser");
+    
+    // Delete ONLY resto_admin_session, keep resto_pos_device
+    cookieDeleteJar.cookies.delete("resto_admin_session");
+    assert(!cookieDeleteJar.cookies.has("resto_admin_session"), "resto_admin_session deleted from browser");
+    assert(cookieDeleteJar.cookies.has("resto_pos_device"), "resto_pos_device remains in browser");
 
-    // Server-side admin verification endpoint rejects the invalid/expired token
-    const expiredMe = await req("/api/auth/me", { jar: expiredDualJar });
-    assert(expiredMe.status === 401, "Expired admin session rejected with 401 on /api/auth/me");
+    // Navigating to /admin with only POS cookie must redirect to /admin/login (NOT /admin/pos)
+    const deletedAdminNav = await req("/admin", { jar: cookieDeleteJar });
+    assert(deletedAdminNav.status === 307 && deletedAdminNav.location?.includes("/admin/login"), "Admin cookie deleted: /admin redirects to /admin/login (NOT /admin/pos)");
 
-    // When admin session is expired/cleared, the proxy directs the POS browser to /admin/pos
-    expiredDualJar.cookies.delete("resto_admin_session");
-    const expiredDualAdmin = await req("/admin", { jar: expiredDualJar });
-    assert(expiredDualAdmin.status === 307 && expiredDualAdmin.location?.includes("/admin/pos"), "Browser with POS cookie and no active admin session is isolated to /admin/pos");
+    // POS Register still works directly
+    const deletedPosNav = await req("/admin/pos", { jar: cookieDeleteJar });
+    assert(deletedPosNav.status === 200, "Admin cookie deleted: /admin/pos remains accessible directly (200 OK)");
 
-    const expiredDualPos = await req("/admin/pos", { jar: expiredDualJar });
-    assert(expiredDualPos.status === 200, "Browser with POS cookie retains fully functional POS Register");
+    // Administrator logs in again using email + password
+    const reLogin = await req("/api/auth/login", {
+      method: "POST",
+      jar: cookieDeleteJar,
+      body: { email: adminEmail, password: currentAdminPassword },
+    });
+    assert(reLogin.status === 200 && reLogin.json?.success, "Administrator logs in again successfully");
+    assert(cookieDeleteJar.cookies.has("resto_admin_session"), "Received fresh resto_admin_session cookie");
+
+    // Admin dashboard accessible again
+    const reAdminNav = await req("/admin", { jar: cookieDeleteJar });
+    assert(reAdminNav.status === 200, "Re-authenticated admin visits /admin -> 200 OK");
 
     // Admin logout on dual browser clears ONLY admin session and preserves POS registration
     const logoutJar = dualJar.clone("logout-test-browser");
@@ -464,7 +480,7 @@ async function main() {
     assert(logoutJar.cookies.has("resto_pos_device"), "resto_pos_device was PRESERVED on logout");
 
     const postLogoutAdmin = await req("/admin", { jar: logoutJar });
-    assert(postLogoutAdmin.status === 307 && postLogoutAdmin.location?.includes("/admin/pos"), "Post-logout browser with POS cookie redirects to /admin/pos");
+    assert(postLogoutAdmin.status === 307 && postLogoutAdmin.location?.includes("/admin/login"), "Post-logout browser with POS cookie redirects to /admin/login (NOT /admin/pos)");
 
     const postLogoutPos = await req("/admin/pos", { jar: logoutJar });
     assert(postLogoutPos.status === 200, "Post-logout browser with POS cookie retains direct POS Register access");

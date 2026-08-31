@@ -9,8 +9,6 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const adminToken = request.cookies.get(ADMIN_COOKIE_NAME)?.value;
   const hasAdminCookie = Boolean(adminToken && adminToken.length > 10);
-  const posToken = request.cookies.get(POS_DEVICE_COOKIE_NAME)?.value;
-  const hasPosCookie = Boolean(posToken && posToken.length > 5);
   const adminAccessPath = DEFAULT_ADMIN_ACCESS_PATH;
   const normalizedPath = pathname.replace(/^\//, "").toLowerCase();
 
@@ -22,26 +20,22 @@ export async function proxy(request: NextRequest) {
     return res;
   };
 
-  // ─── ROUTING PRECEDENCE ──────────────────────────────────────────────
+  // ─── ROUTING ARCHITECTURE ──────────────────────────────────────────────
   //
   // 1. POS routes (/admin/pos, /admin/pos/*)
-  //    Always accessible directly. The page / POS APIs independently verify
-  //    the POS device status. An admin session alone does not create a POS device.
+  //    Always accessible directly. The POS page and POS APIs independently
+  //    verify the registered POS device in the database.
   //
   // 2. Custom Admin Entry Path (e.g. /lovekitchen or configured access path)
   //    - If Admin session present → redirect to /admin
-  //    - If ONLY POS cookie present → redirect to /admin/pos
-  //    - Unauthenticated → rewrite to /admin/login
+  //    - If unauthenticated → rewrite to /admin/login
   //
   // 3. Admin Login Page (/admin/login)
-  //    - If Admin session present (even if POS cookie also exists) → redirect to /admin
-  //    - If ONLY POS cookie present → redirect to /admin/pos
-  //    - Neither present → serve login page
+  //    - Always serves the login page directly (no automatic redirect to /admin/pos).
   //
-  // 4. Admin Dashboard & Sub-routes (/admin, /admin/products, /admin/settings, etc.)
-  //    - If Admin session present → ALLOW ACCESS (even if POS cookie also exists)
-  //    - If ONLY POS cookie present → redirect to /admin/pos
-  //    - Unauthenticated visitor → redirect to /admin/login
+  // 4. Admin Dashboard & Protected Sub-routes (/admin, /admin/products, /admin/settings, etc.)
+  //    - If Admin session present → allow access to /admin
+  //    - If missing or unauthenticated → redirect to /admin/login (NEVER /admin/pos).
   //
   // 5. Storefront & Public Routes
   //    - Pass through.
@@ -57,36 +51,23 @@ export async function proxy(request: NextRequest) {
     if (hasAdminCookie) {
       return withNoCache(NextResponse.redirect(new URL("/admin", request.url)));
     }
-    if (hasPosCookie) {
-      return withNoCache(NextResponse.redirect(new URL("/admin/pos", request.url)));
-    }
     // Unauthenticated: rewrite internally to login form while keeping URL in address bar
     return withNoCache(NextResponse.rewrite(new URL("/admin/login", request.url)));
   }
 
   // 3. Admin Login Page (/admin/login)
   if (pathname === "/admin/login") {
-    // If the browser has ONLY a registered POS device cookie (and no admin session), isolate to /admin/pos
-    if (hasPosCookie && !hasAdminCookie) {
-      return withNoCache(NextResponse.redirect(new URL("/admin/pos", request.url)));
-    }
-    // Allow access to login form without unverified redirect loops
     return withNoCache(NextResponse.next());
   }
 
   // 4. Admin Dashboard & Protected Sub-routes (/admin, /admin/products, /admin/settings, etc.)
   if (pathname === "/admin" || pathname.startsWith("/admin/")) {
-    // Priority 1: Valid admin session takes priority on /admin and /admin/*
+    // If admin session cookie present, pass through to allow page/server-side validation
     if (hasAdminCookie) {
       return withNoCache(NextResponse.next());
     }
 
-    // Priority 2: If no admin session, registered POS terminals are isolated to /admin/pos
-    if (hasPosCookie) {
-      return withNoCache(NextResponse.redirect(new URL("/admin/pos", request.url)));
-    }
-
-    // Priority 3: Unauthenticated visitor → redirect to admin login
+    // Unauthenticated visitor (regardless of whether a POS cookie exists) → redirect to admin login
     return withNoCache(NextResponse.redirect(new URL("/admin/login", request.url)));
   }
 
