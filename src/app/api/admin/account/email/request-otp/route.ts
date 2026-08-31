@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
     }
 
     const normalizedNewEmail = newEmail.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+d/.test(normalizedNewEmail)) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedNewEmail)) {
       return NextResponse.json(
         { success: false, error: "Please enter a valid email address format." },
         { status: 400 }

@@ -22,6 +22,7 @@ import EmptyState from "@/components/EmptyState";
 import { Category, Product } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import { useToast } from "@/components/ToastContext";
+import { adminFetch } from "@/lib/adminFetch";
 
 export default function CategoriesPage() {
   const { showToast } = useToast();
@@ -55,7 +56,7 @@ export default function CategoriesPage() {
   const fetchCategories = useCallback(async () => {
     try {
       setIsLoading(true);
-      const res = await fetch("/api/categories");
+      const res = await adminFetch("/api/categories");
       const data = await res.json();
       if (data.success) {
         setCategories(data.data || []);

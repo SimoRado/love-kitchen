@@ -55,12 +55,12 @@ export default function AdminHeader({
     try {
       setIsLoggingOut(true);
       await fetch("/api/auth/logout", { method: "POST" });
-      showToast("Logged out successfully.", "info");
-      router.push("/admin/login");
-      router.refresh();
+      // Hard navigation — bypasses Next.js client router cache and any
+      // stale cookie state. The proxy will see the cleared admin cookie
+      // and serve the login page directly.
+      window.location.href = "/admin/login";
     } catch {
       showToast("Logout failed. Please try again.", "error");
-    } finally {
       setIsLoggingOut(false);
     }
   };

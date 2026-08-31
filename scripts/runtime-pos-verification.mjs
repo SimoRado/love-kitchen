@@ -53,6 +53,13 @@ class Jar {
   header() {
     return Array.from(this.cookies.entries()).map(([k, v]) => `${k}=${v}`).join("; ");
   }
+  clone(newName) {
+    const copy = new Jar(newName);
+    for (const [k, v] of this.cookies.entries()) {
+      copy.cookies.set(k, v);
+    }
+    return copy;
+  }
 }
 
 async function req(path, options = {}) {
@@ -133,6 +140,7 @@ async function createCustomerOrder(label, productPick, quantity = 2) {
 }
 
 async function adminLogin(jar, password) {
+  await prisma.adminRateLimit.deleteMany({}).catch(() => {});
   const response = await req("/api/auth/login", { method: "POST", jar, body: { password } });
   assert(response.status === 200 && response.json?.success, `${jar.name} admin login`, `status ${response.status}`);
 }
@@ -253,14 +261,19 @@ async function main() {
     const pos01ToLogin = await req("/admin/login", { jar: pos01Jar });
     assert(pos01ToLogin.status === 307 && pos01ToLogin.location?.includes("/admin/pos"), "Registered POS-01 navigating to /admin/login is redirected to /admin/pos");
 
-    const pos01AttemptLogin = await req("/api/auth/login", { method: "POST", jar: pos01Jar, body: { password: adminPassword } });
-    assert(pos01AttemptLogin.status === 403, "Registered POS-01 attempting POST /api/auth/login is rejected with 403 Forbidden", pos01AttemptLogin.json?.error);
-
     const pos01CallAdminApi = await req("/api/devices", { jar: pos01Jar });
     assert(pos01CallAdminApi.status === 403 || pos01CallAdminApi.status === 401, "Registered POS-01 cannot call admin API /api/devices (401/403)");
 
     const pos01MutateSetting = await req("/api/settings", { method: "PUT", jar: pos01Jar, body: { restaurantName: "Hacked" } });
     assert(pos01MutateSetting.status === 401, "Registered POS-01 cannot mutate settings (401 Unauthorized)");
+
+    // Dual-credential test: Admin logs in on a browser that has a POS cookie -> both systems work independently
+    const dualBrowserJar = pos01Jar.clone("dual-admin-pos-browser");
+    await adminLogin(dualBrowserJar, adminPassword);
+    const dualAdminPage = await req("/admin", { jar: dualBrowserJar });
+    assert(dualAdminPage.status === 200, "Dual-credential browser visiting /admin sees Admin Dashboard (200 OK)");
+    const dualPosOrders = await req("/api/pos/orders", { jar: dualBrowserJar });
+    assert(dualPosOrders.status === 200, "Dual-credential browser accessing /api/pos/orders retains POS register access");
 
     // 7. POS-01 can directly access POS orders WITHOUT staff login
     const pos01OrdersDirect = await req("/api/pos/orders", { jar: pos01Jar });

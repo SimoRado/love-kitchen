@@ -87,6 +87,15 @@ export default function PosPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- load remote POS data after mount
     loadDevice();
     loadCatalog();
+
+    const handlePageShow = () => {
+      loadDevice();
+    };
+
+    window.addEventListener("pageshow", handlePageShow);
+    return () => {
+      window.removeEventListener("pageshow", handlePageShow);
+    };
   }, [loadDevice, loadCatalog]);
 
   // Realtime SSE Event Stream
@@ -158,6 +167,9 @@ export default function PosPage() {
         const pairedName = data.data?.device?.name || "Restaurant iPad";
         setJustPairedDeviceName(pairedName);
         setRegistrationCode("");
+        if (typeof window !== "undefined") {
+          window.history.replaceState(null, "", "/admin/pos");
+        }
 
         // Pleasant success transition
         setTimeout(async () => {

@@ -82,6 +82,7 @@ async function req(path, options = {}) {
 }
 
 async function adminLogin(jar, password) {
+  await prisma.adminRateLimit.deleteMany({}).catch(() => {});
   const response = await req('/api/auth/login', { method: 'POST', jar, body: { password } });
   assert(response.status === 200 && response.json?.success, `${jar.name} admin login`, `status ${response.status}`);
 }

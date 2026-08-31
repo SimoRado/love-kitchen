@@ -22,6 +22,7 @@ import {
 import { Device, DeviceRegistrationCode } from "@/lib/types";
 import { formatRelativeTime } from "@/lib/formatters";
 import { useToast } from "@/components/ToastContext";
+import { adminFetch } from "@/lib/adminFetch";
 
 function statusClass(status: string) {
   if (status === "ACTIVE") return "bg-emerald-50 text-emerald-700 border-emerald-300";
@@ -40,6 +41,7 @@ export default function DevicesPage() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [invitations, setInvitations] = useState<DeviceRegistrationCode[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   // Invitation creation modal
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -61,7 +63,7 @@ export default function DevicesPage() {
 
   const loadDevices = useCallback(async () => {
     try {
-      const res = await fetch("/api/devices", { cache: "no-store" });
+      const res = await adminFetch("/api/devices", { cache: "no-store" });
       const data = await res.json();
       if (data.success) {
         setDevices(data.data || []);

@@ -15,6 +15,8 @@ import {
   CheckCircle2,
 } from "lucide-react";
 
+import { adminFetch } from "@/lib/adminFetch";
+
 interface AdminProfile {
   id: string;
   email: string;
@@ -74,8 +76,8 @@ export default function AdminSecurityPage() {
     try {
       setLoading(true);
       const [profileRes, sessionsRes] = await Promise.all([
-        fetch("/api/auth/me"),
-        fetch("/api/admin/account/sessions"),
+        adminFetch("/api/auth/me"),
+        adminFetch("/api/admin/account/sessions"),
       ]);
 
       if (profileRes.ok) {

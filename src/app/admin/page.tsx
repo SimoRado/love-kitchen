@@ -24,6 +24,7 @@ import {
   formatRelativeTime,
   getOrderTypeConfig,
 } from "@/lib/formatters";
+import { adminFetch } from "@/lib/adminFetch";
 import { useToast } from "@/components/ToastContext";
 
 export default function DashboardPage() {
@@ -35,7 +36,7 @@ export default function DashboardPage() {
 
   const fetchStats = useCallback(async () => {
     try {
-      const res = await fetch("/api/stats");
+      const res = await adminFetch("/api/stats");
       const data = await res.json();
       if (data.success && data.data) {
         setStats(data.data);

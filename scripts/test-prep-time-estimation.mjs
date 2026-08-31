@@ -1,6 +1,8 @@
 import fs from "node:fs";
+import { PrismaClient } from "@prisma/client";
 
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
+const prisma = new PrismaClient();
 
 let adminCookie = "";
 let createdProductIds = [];
@@ -27,7 +29,8 @@ function fail(msg) {
 }
 
 async function loginAdmin() {
-  const adminPassword = loadEnvValue("ADMIN_PASSWORD") || process.env.ADMIN_PASSWORD || "admin123";
+  await prisma.adminRateLimit.deleteMany({}).catch(() => {});
+  const adminPassword = loadEnvValue("ADMIN_PASSWORD") || process.env.ADMIN_PASSWORD || "123";
   const res = await fetch(`${BASE_URL}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -273,15 +276,19 @@ async function run() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ code: codeData.data.code }),
   });
-  const posCookies = regRes.headers.getSetCookie ? regRes.headers.getSetCookie() : [regRes.headers.get("set-cookie")].filter(Boolean);
-  const posCookie = posCookies.map((c) => c.split(";")[0]).join("; ");
+  if (!regRes.ok) {
+    const errText = await regRes.text();
+    fail("Failed to register POS device: " + regRes.status + " " + errText);
+  }
+  const rawSetCookie = regRes.headers.get("set-cookie") || "";
+  const posCookie = rawSetCookie.split(";")[0].trim();
 
   // Create manual POS order
   const posOrderRes = await fetch(`${BASE_URL}/api/pos/orders`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Cookie: `${posCookie}; ${adminCookie}`,
+      Cookie: posCookie,
     },
     body: JSON.stringify({
       customerName: "POS Walk-in Mohamed",
@@ -294,7 +301,7 @@ async function run() {
     }),
   });
   const posOrderData = await posOrderRes.json();
-  if (!posOrderData.success || !posOrderData.data) fail("Failed to create POS manual order");
+  if (!posOrderData.success || !posOrderData.data) fail("Failed to create POS manual order: " + JSON.stringify(posOrderData));
   const posOrder = posOrderData.data;
   createdOrderIds.push(posOrder.id);
   if (!posOrder.estimatedPrepMinutes || !posOrder.estimatedReadyAt) {
@@ -341,7 +348,11 @@ async function run() {
   console.log("==================================================");
 }
 
-run().catch((err) => {
-  console.error("Test execution failed:", err);
-  process.exit(1);
-});
+run()
+  .catch((err) => {
+    console.error("Test execution failed:", err);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect().catch(() => {});
+  });

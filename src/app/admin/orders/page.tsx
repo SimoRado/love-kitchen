@@ -19,6 +19,7 @@ import {
   getOrderTypeConfig,
 } from "@/lib/formatters";
 import { useToast } from "@/components/ToastContext";
+import { adminFetch } from "@/lib/adminFetch";
 
 const STATUS_FILTERS = [
   { id: "ALL", label: "All Orders" },
@@ -47,7 +48,7 @@ export default function OrdersPage() {
 
   const fetchOrders = useCallback(async () => {
     try {
-      const res = await fetch("/api/orders");
+      const res = await adminFetch("/api/orders");
       const data = await res.json();
       if (data.success) {
         setOrders(data.data || []);

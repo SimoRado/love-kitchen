@@ -19,6 +19,7 @@ import EmptyState from "@/components/EmptyState";
 import { Product, Category } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import { useToast } from "@/components/ToastContext";
+import { adminFetch } from "@/lib/adminFetch";
 
 export default function ProductsPage() {
   const { showToast } = useToast();
@@ -48,8 +49,8 @@ export default function ProductsPage() {
     try {
       setIsLoading(true);
       const [prodRes, catRes] = await Promise.all([
-        fetch("/api/products"),
-        fetch("/api/categories"),
+        adminFetch("/api/products"),
+        adminFetch("/api/categories"),
       ]);
 
       const prodData = await prodRes.json();

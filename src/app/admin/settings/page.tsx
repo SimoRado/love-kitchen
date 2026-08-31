@@ -18,6 +18,7 @@ import LoadingState from "@/components/LoadingState";
 import { RestaurantSettings, OpeningHour } from "@/lib/types";
 import { useToast } from "@/components/ToastContext";
 import { normalizeWhatsAppNumber } from "@/lib/constants";
+import { adminFetch } from "@/lib/adminFetch";
 
 const ORDERED_DAYS = [
   { dayOfWeek: 1, name: "Monday" },
@@ -53,7 +54,7 @@ export default function SettingsPage() {
   const fetchSettings = useCallback(async () => {
     try {
       setIsLoading(true);
-      const res = await fetch("/api/settings");
+      const res = await adminFetch("/api/settings");
       const data = await res.json();
       if (data.success && data.data) {
         const s: RestaurantSettings = data.data;

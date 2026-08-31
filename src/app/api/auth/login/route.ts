@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
       request.headers.get("x-real-ip") ||
       "127.0.0.1";
 
-    // Distributed Rate Limiting (max 5 attempts per minute per IP)
+    // 1. Distributed Rate Limiting (max 5 attempts per minute per IP)
     const rateLimit = await checkRateLimit(`login:ip:${ip}`, 5, 60);
     if (!rateLimit.allowed) {
       return NextResponse.json(
@@ -86,13 +86,6 @@ export async function POST(request: NextRequest) {
     });
 
     setAdminSessionCookie(response, token);
-    response.cookies.set({
-      name: "resto_pos_device",
-      value: "",
-      httpOnly: true,
-      path: "/",
-      maxAge: 0,
-    });
     return response;
   } catch (error) {
     console.error("Login route error:", error);

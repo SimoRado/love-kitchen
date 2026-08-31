@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { usePathname } from "next/navigation";
 import AdminSidebar from "@/components/AdminSidebar";
 import AdminHeader from "@/components/AdminHeader";
@@ -13,6 +13,64 @@ export default function AdminLayout({
 }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Client-side Back/Forward & bfcache Safety Net
+  // This ONLY runs on browser back/forward, bfcache restore, or tab re-focus —
+  // NOT on initial page load (the server-side proxy handles initial routing).
+  const verifyAdminAccess = useCallback(async () => {
+    // Skip verification on login and POS pages
+    if (pathname === "/admin/pos" || pathname === "/admin/login") return;
+
+    // Verify the admin session is still valid server-side
+    try {
+      const res = await fetch("/api/auth/me", { cache: "no-store" });
+      if (!res.ok) {
+        // If not a valid admin, check if this is a registered POS device
+        const hasPosDeviceCookie = document.cookie.includes("resto_pos_device=");
+        if (hasPosDeviceCookie) {
+          window.location.replace("/admin/pos");
+        } else {
+          window.location.replace("/admin/login");
+        }
+      }
+    } catch {
+      // Network error — don't redirect, let the page stay
+    }
+  }, [pathname]);
+
+  useEffect(() => {
+    // Proactively verify admin access on mount for protected routes
+    verifyAdminAccess();
+
+    // Re-verify on bfcache restore (back/forward button from a cached page)
+    const handlePageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) {
+        verifyAdminAccess();
+      }
+    };
+
+    // Re-verify on browser back/forward button navigation
+    const handlePopState = () => {
+      verifyAdminAccess();
+    };
+
+    // Re-verify when the tab becomes visible again (e.g. user switches back)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        verifyAdminAccess();
+      }
+    };
+
+    window.addEventListener("pageshow", handlePageShow);
+    window.addEventListener("popstate", handlePopState);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("pageshow", handlePageShow);
+      window.removeEventListener("popstate", handlePopState);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [verifyAdminAccess]);
 
   // For /admin/login page, render clean standalone container
   if (pathname === "/admin/login" || pathname === "/admin/pos") {

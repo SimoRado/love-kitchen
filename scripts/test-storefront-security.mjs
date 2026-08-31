@@ -1,3 +1,7 @@
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
+
 async function runSuite() {
   const baseUrl = "http://localhost:3000";
   console.log("🛡️ Starting Security, Storefront, and Order Validation Test Suite...\n");
@@ -27,6 +31,7 @@ async function runSuite() {
 
   // 2. Admin Authentication Flow
   console.log("\n--- 2. Testing Admin Login Flow ---");
+  await prisma.adminRateLimit.deleteMany({}).catch(() => {});
   const badLogin = await fetch(`${baseUrl}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -203,7 +208,11 @@ async function runSuite() {
   console.log("\n🎉 ALL SECURITY, STOREFRONT, AND DATA INTEGRITY TESTS PASSED WITH 100% SUCCESS!");
 }
 
-runSuite().catch((err) => {
-  console.error("❌ Test suite failed:", err);
-  process.exit(1);
-});
+runSuite()
+  .catch((err) => {
+    console.error("❌ Test suite failed:", err);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect().catch(() => {});
+  });

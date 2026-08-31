@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 export const ADMIN_COOKIE_NAME = "resto_admin_session";
-export const SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60; // 7 days
+export const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60; // 30 days persistent admin session
 
 function sha256(value: string): string {
   return crypto.createHash("sha256").update(value).digest("hex");

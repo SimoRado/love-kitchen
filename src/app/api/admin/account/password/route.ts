@@ -55,8 +55,11 @@ export async function POST(request: NextRequest) {
       data: { passwordHash },
     });
 
-    // Invalidate all open sessions across other devices
-    await invalidateAllAdminSessions(admin.id);
+    const currentToken = request.cookies.get("resto_admin_session")?.value;
+    const currentSessionId = currentToken ? currentToken.split(".")[0] : undefined;
+
+    // Invalidate all open sessions across other devices while preserving the current active session
+    await invalidateAllAdminSessions(admin.id, currentSessionId);
 
     await sendSecurityAlertEmail(
       admin.email,

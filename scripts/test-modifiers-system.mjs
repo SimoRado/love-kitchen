@@ -1,12 +1,15 @@
 import assert from "node:assert";
+import { PrismaClient } from "@prisma/client";
 
 const baseUrl = "http://localhost:3000";
+const prisma = new PrismaClient();
 
 async function main() {
   console.log("🧪 Starting Comprehensive Product Modifiers & Add-ons System Test...\n");
 
   // 1. Authenticate Admin
   console.log("--- 1. Admin Authentication ---");
+  await prisma.adminRateLimit.deleteMany({}).catch(() => {});
   const loginRes = await fetch(`${baseUrl}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -374,7 +377,11 @@ async function main() {
   console.log("\n🎉 ALL MODIFIER TESTS, SNAPSHOT IMMUTABILITY & SECURITY CHECKS PASSED WITH 100% SUCCESS!");
 }
 
-main().catch((err) => {
-  console.error("❌ Test failed with error:", err);
-  process.exit(1);
-});
+main()
+  .catch((err) => {
+    console.error("❌ Test failed with error:", err);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect().catch(() => {});
+  });
