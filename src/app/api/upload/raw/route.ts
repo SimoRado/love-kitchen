@@ -1,10 +1,18 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { saveLocalRawFile, SANITY_MAX_RAW_SIZE } from "@/lib/storage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function PUT(request: NextRequest) {
+  // In production / Vercel, direct server uploads are strictly disabled to prevent payload size errors
+  if (process.env.NODE_ENV === "production" || process.env.VERCEL) {
+    return NextResponse.json(
+      { success: false, error: "Direct server upload is disabled in production. Use direct cloud storage upload." },
+      { status: 403 }
+    );
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const rawPath = searchParams.get("path");

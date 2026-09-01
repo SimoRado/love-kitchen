@@ -147,42 +147,21 @@ export default function ProductModal({
 
       const { signedUrl, rawPath } = signData.data;
 
-      // Stage 2: Upload RAW file DIRECTLY to storage (bypasses Vercel serverless request body)
-      let directUploadRes: Response;
-      if (signedUrl.includes("/api/upload/raw")) {
-        // Local development direct raw upload
-        directUploadRes = await fetch(signedUrl, {
-          method: "PUT",
-          headers: { "Content-Type": file.type },
-          body: file,
-        });
-      } else {
-        // Direct Supabase Storage signed upload (multipart FormData format)
-        const storageFormData = new FormData();
-        storageFormData.append("cacheControl", "3600");
-        storageFormData.append("", file);
-
-        directUploadRes = await fetch(signedUrl, {
-          method: "PUT",
-          headers: { "x-upsert": "true" },
-          body: storageFormData,
-        });
-
-        // Fallback to binary body if storage endpoint expects raw bytes
-        if (!directUploadRes.ok && directUploadRes.status !== 401 && directUploadRes.status !== 403) {
-          directUploadRes = await fetch(signedUrl, {
-            method: "PUT",
-            headers: {
-              "Content-Type": file.type,
-              "x-upsert": "true",
-            },
-            body: file,
-          });
-        }
-      }
+      // Stage 2: Upload RAW file DIRECTLY to storage (browser directly to Supabase Storage, bypassing Vercel serverless functions)
+      const directUploadRes = await fetch(signedUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": file.type || "application/octet-stream",
+          "x-upsert": "true",
+        },
+        body: file,
+      });
 
       if (!directUploadRes.ok) {
-        throw new Error(`Direct storage upload failed (HTTP ${directUploadRes.status}). Please try again.`);
+        const errorText = await directUploadRes.text().catch(() => "");
+        throw new Error(
+          `Direct storage upload failed (HTTP ${directUploadRes.status}${errorText ? `: ${errorText}` : ""}). Please try again.`
+        );
       }
 
       // Stage 3: Request server-side Sharp optimization (auto EXIF rotate + 1200x750 WebP q80)

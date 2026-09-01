@@ -158,7 +158,17 @@ export async function createSignedProductUploadUrl(
         rawPath,
       };
     }
-    console.warn("Supabase createSignedUploadUrl error:", error?.message);
+    if (error) {
+      console.error("Supabase createSignedUploadUrl error:", error.message);
+      throw new Error(`Failed to generate Supabase Storage signed upload URL: ${error.message}`);
+    }
+  }
+
+  // In production / Vercel, cloud storage is strictly required to prevent FUNCTION_PAYLOAD_TOO_LARGE errors
+  if (process.env.NODE_ENV === "production" || process.env.VERCEL) {
+    throw new Error(
+      "Cloud storage is not configured for production. Please configure NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY) in your environment variables."
+    );
   }
 
   // Development-only direct upload URL when cloud storage credentials are not provided
@@ -313,82 +323,16 @@ async function deleteRawStorageFile(rawPath: string): Promise<void> {
 }
 
 /**
- * Direct file upload fallback (processes file with sharp into WebP and uploads).
- * @deprecated Use createSignedProductUploadUrl -> direct storage -> processRawProductImage pipeline.
+ * Direct file upload fallback is disabled to prevent Vercel 413 FUNCTION_PAYLOAD_TOO_LARGE.
+ * @deprecated Use the canonical signed upload pipeline: POST /api/upload/sign -> Direct Storage -> POST /api/upload/process
  */
 export async function uploadProductImage(
-  file: File,
-  customPrefix?: string
+  _file: File,
+  _customPrefix?: string
 ): Promise<{ url: string; filename: string }> {
-  if (!file || file.size === 0) {
-    throw new Error("No image file provided.");
-  }
-  if (file.size > SANITY_MAX_RAW_SIZE) {
-    throw new Error("Image size must not exceed 30 MB.");
-  }
-
-  const rawBytes = new Uint8Array(await file.arrayBuffer());
-  const signatureCheck = matchesImageSignature(rawBytes.slice(0, 32));
-  if (!signatureCheck.valid) {
-    throw new Error("This doesn't look like a valid image file.");
-  }
-
-  // Sharp optimization
-  const optimizedBuffer = await sharp(Buffer.from(rawBytes))
-    .rotate()
-    .resize(TARGET_WIDTH, TARGET_HEIGHT, {
-      fit: "cover",
-      position: "centre",
-    })
-    .webp({ quality: WEBP_QUALITY })
-    .toBuffer();
-
-  const finalUuid = crypto.randomUUID();
-  const baseName = customPrefix
-    ? `${customPrefix}-${finalUuid.slice(0, 8)}.webp`
-    : `${finalUuid}.webp`;
-  const storagePath = `products/${baseName}`;
-
-  const supabase = getSupabaseStorageClient();
-  if (supabase) {
-    const { error } = await supabase.storage
-      .from("product-images")
-      .upload(storagePath, optimizedBuffer, {
-        contentType: "image/webp",
-        upsert: true,
-        cacheControl: "31536000",
-      });
-
-    if (!error) {
-      const projectUrl = getSupabaseProjectUrl();
-      return {
-        url: `${projectUrl}/storage/v1/object/public/product-images/${storagePath}`,
-        filename: storagePath,
-      };
-    }
-    throw new Error(`Supabase upload failed: ${error.message}`);
-  }
-
-  if (process.env.BLOB_READ_WRITE_TOKEN) {
-    const blob = await put(storagePath, optimizedBuffer, {
-      access: "public",
-      addRandomSuffix: false,
-      contentType: "image/webp",
-    });
-    return {
-      url: blob.url,
-      filename: blob.pathname,
-    };
-  }
-
-  // Local development storage
-  const localFinalPath = path.join(LOCAL_STORAGE_DIR, storagePath);
-  ensureLocalDir(path.dirname(localFinalPath));
-  fs.writeFileSync(localFinalPath, optimizedBuffer);
-  return {
-    url: `/uploads/${storagePath}`,
-    filename: storagePath,
-  };
+  throw new Error(
+    "Direct function upload is deprecated and disabled. Use the canonical signed upload pipeline (/api/upload/sign -> direct storage -> /api/upload/process)."
+  );
 }
 
 /**
