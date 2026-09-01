@@ -1,53 +1,58 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 let activeLocksCount = 0;
-let prevOverflow = "";
+let prevBodyOverflow = "";
+let prevHtmlOverflow = "";
 let prevPaddingRight = "";
-let prevPosition = "";
-let prevTop = "";
-let prevLeft = "";
-let prevWidth = "";
-let lockedScrollX = 0;
-let lockedScrollY = 0;
-let usesFixedMobileLock = false;
+let savedScrollY = 0;
+let savedScrollX = 0;
 
 /**
  * Reusable hook to lock the background body scroll while an overlay (Modal or Drawer) is open.
- * Uses a reference counter so nested or sequential overlays do not prematurely unlock the body.
+ * Uses reference counting so nested or sequential overlays do not prematurely unlock the body.
  * Compensates for scrollbar width on desktop to prevent layout shifts.
+ * Preserves the exact page scroll position across open/close cycles on both mobile and desktop.
  */
 export function useBodyScrollLock(isOpen: boolean) {
+  const localScrollYRef = useRef<number | null>(null);
+
   useEffect(() => {
     if (!isOpen) return;
 
-    if (typeof document === "undefined") return;
+    if (typeof window === "undefined" || typeof document === "undefined") return;
+
+    const currentY =
+      window.scrollY ||
+      window.pageYOffset ||
+      document.documentElement.scrollTop ||
+      document.body.scrollTop ||
+      0;
+    const currentX =
+      window.scrollX ||
+      window.pageXOffset ||
+      document.documentElement.scrollLeft ||
+      document.body.scrollLeft ||
+      0;
+
+    localScrollYRef.current = currentY;
 
     if (activeLocksCount === 0) {
-      prevOverflow = document.body.style.overflow || "";
+      savedScrollY = currentY;
+      savedScrollX = currentX;
+      prevBodyOverflow = document.body.style.overflow || "";
+      prevHtmlOverflow = document.documentElement.style.overflow || "";
       prevPaddingRight = document.body.style.paddingRight || "";
-      prevPosition = document.body.style.position || "";
-      prevTop = document.body.style.top || "";
-      prevLeft = document.body.style.left || "";
-      prevWidth = document.body.style.width || "";
 
       const scrollbarWidth =
         window.innerWidth - document.documentElement.clientWidth;
       if (scrollbarWidth > 0) {
         document.body.style.paddingRight = `${scrollbarWidth}px`;
       }
-      document.body.style.overflow = "hidden";
 
-      usesFixedMobileLock = window.matchMedia("(max-width: 639px)").matches;
-      if (usesFixedMobileLock) {
-        lockedScrollX = window.scrollX;
-        lockedScrollY = window.scrollY;
-        document.body.style.position = "fixed";
-        document.body.style.top = `-${lockedScrollY}px`;
-        document.body.style.left = `-${lockedScrollX}px`;
-        document.body.style.width = "100%";
-      }
+      document.body.style.overflow = "hidden";
+      document.documentElement.style.overflow = "hidden";
     }
 
     activeLocksCount++;
@@ -55,16 +60,19 @@ export function useBodyScrollLock(isOpen: boolean) {
     return () => {
       activeLocksCount = Math.max(0, activeLocksCount - 1);
       if (activeLocksCount === 0 && typeof document !== "undefined") {
-        document.body.style.overflow = prevOverflow;
+        document.body.style.overflow = prevBodyOverflow;
+        document.documentElement.style.overflow = prevHtmlOverflow;
         document.body.style.paddingRight = prevPaddingRight;
-        document.body.style.position = prevPosition;
-        document.body.style.top = prevTop;
-        document.body.style.left = prevLeft;
-        document.body.style.width = prevWidth;
 
-        if (usesFixedMobileLock) {
-          window.scrollTo(lockedScrollX, lockedScrollY);
-          usesFixedMobileLock = false;
+        const targetY = localScrollYRef.current ?? savedScrollY;
+        const targetX = savedScrollX;
+
+        if (typeof window !== "undefined") {
+          window.scrollTo({
+            top: targetY,
+            left: targetX,
+            behavior: "instant" as ScrollBehavior,
+          });
         }
       }
     };

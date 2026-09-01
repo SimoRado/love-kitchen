@@ -85,11 +85,6 @@ export default function StorefrontPage() {
   ) => {
     if (!configuringProduct) return;
     addItem(configuringProduct, quantity, selectedModifiers);
-    // Mobile keeps the product mounted until ProductConfigModal finishes its
-    // transform exit; desktop retains its existing immediate-close behavior.
-    if (window.matchMedia("(min-width: 640px)").matches) {
-      setConfiguringProduct(null);
-    }
   };
 
   if (isLoading) {

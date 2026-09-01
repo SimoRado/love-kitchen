@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense } from "react";
+import React, { Suspense, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CheckCircle2, ShoppingBag, Truck, ArrowLeft, Clock } from "lucide-react";
@@ -14,6 +14,12 @@ function OrderSuccessContent() {
   const currency = searchParams.get("currency") || "MAD";
   const estimatedReadyAt = searchParams.get("estimatedReadyAt");
   const estimatedPrepMinutes = searchParams.get("estimatedPrepMinutes");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#FAF7F0] flex flex-col justify-center items-center px-4 py-12">

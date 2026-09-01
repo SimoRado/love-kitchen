@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Plus, Check, UtensilsCrossed, SlidersHorizontal } from "lucide-react";
+import { Plus, Check, UtensilsCrossed } from "lucide-react";
 import { Product, SelectedModifierOptionSnapshot } from "@/lib/types";
 import { formatCurrency } from "@/lib/formatters";
 import { useCartStore } from "@/store/useCartStore";
@@ -98,15 +98,11 @@ export default function ProductCard({
 
             {/* Badges Overlay */}
             <div className="absolute top-2 right-2 sm:top-2.5 sm:right-2.5 flex flex-col gap-1 items-end">
-              {!isAvailable ? (
+              {!isAvailable && (
                 <div className="bg-slate-900/80 text-white text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md shadow-xs">
                   Sold Out
                 </div>
-              ) : productHasModifiers ? (
-                <div className="bg-[#C8102E]/90 text-white text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md shadow-xs">
-                  Customizable
-                </div>
-              ) : null}
+              )}
             </div>
           </div>
 
@@ -161,11 +157,6 @@ export default function ProductCard({
               <>
                 <Check className="w-3.5 h-3.5" />
                 <span>Added</span>
-              </>
-            ) : productHasModifiers ? (
-              <>
-                <SlidersHorizontal className="w-3.5 h-3.5" />
-                <span>Customize</span>
               </>
             ) : (
               <>

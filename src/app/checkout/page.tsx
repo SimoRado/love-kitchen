@@ -56,6 +56,17 @@ export default function CheckoutPage() {
   const submissionLock = React.useRef(false);
   const idempotencyKey = React.useRef<string | null>(null);
 
+  // Ensure checkout page always opens at the top (scrollY = 0) on initial navigation
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
+      const raf = requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
+      });
+      return () => cancelAnimationFrame(raf);
+    }
+  }, []);
+
   /* eslint-disable react-hooks/set-state-in-effect -- synchronize form defaults after persisted cart hydration */
   useEffect(() => {
     if (!hasHydrated) return;
