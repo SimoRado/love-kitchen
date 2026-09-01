@@ -2,10 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAdminUserFromRequest } from "@/lib/auth";
-
 import { verifyPassword } from "@/lib/password";
-import { createAdminOtp } from "@/lib/otp";
-import { sendEmailVerificationOtp } from "@/lib/emailService";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { recordAuditLog } from "@/lib/auditLog";
 
@@ -24,12 +21,13 @@ export async function POST(request: NextRequest) {
       request.headers.get("x-real-ip") ||
       "127.0.0.1";
 
-    const rateLimit = await checkRateLimit(`change-email:ip:${ip}`, 3, 300);
+    // Rate limit: 10 attempts per 5 minutes per IP
+    const rateLimit = await checkRateLimit(`change-email:ip:${ip}`, 10, 300);
     if (!rateLimit.allowed) {
       return NextResponse.json(
         {
           success: false,
-          error: "Too many email change requests. Please wait a few minutes before trying again.",
+          error: "Too many email change attempts. Please wait a few minutes before trying again.",
         },
         { status: 429 }
       );
@@ -53,7 +51,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (normalizedNewEmail === admin.email) {
+    if (normalizedNewEmail === admin.email.toLowerCase()) {
       return NextResponse.json(
         { success: false, error: "New email address must be different from current email." },
         { status: 400 }
@@ -69,7 +67,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if new email is already taken by another admin
+    // Check if new email is already taken by another account
     const existingOther = await prisma.adminUser.findUnique({
       where: { email: normalizedNewEmail },
     });
@@ -80,26 +78,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate 10-minute OTP
-    const { code } = await createAdminOtp(admin.id, "EMAIL_CHANGE", normalizedNewEmail);
+    // Update AdminUser email directly (single-step, password verified)
+    const updated = await prisma.adminUser.update({
+      where: { id: admin.id },
+      data: { email: normalizedNewEmail },
+    });
 
-    await sendEmailVerificationOtp(normalizedNewEmail, code);
-
-    await recordAuditLog("EMAIL_CHANGE_OTP_REQUESTED", {
+    await recordAuditLog("EMAIL_CHANGED", {
       adminId: admin.id,
-      details: { fromEmail: admin.email, toEmail: normalizedNewEmail },
+      details: { newEmail: normalizedNewEmail },
       req: request,
     });
 
     return NextResponse.json({
       success: true,
-      message: `A 6-digit verification code has been sent to ${normalizedNewEmail}. Valid for 10 minutes.`,
+      message: "Administrator email address updated successfully.",
+      data: {
+        id: updated.id,
+        email: updated.email,
+        adminAccessPath: updated.adminAccessPath,
+      },
     });
   } catch (error) {
-    console.error("Email change request OTP error:", error);
+    console.error("Change email error:", error);
     return NextResponse.json(
-      { success: false, error: "Failed to initiate email change. Please try again." },
+      { success: false, error: "Failed to update email address. Please try again." },
       { status: 500 }
     );
   }
 }
+
+export const PUT = POST;

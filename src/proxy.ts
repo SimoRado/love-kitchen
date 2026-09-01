@@ -20,22 +20,26 @@ export async function proxy(request: NextRequest) {
     return res;
   };
 
-  // ─── ROUTING ARCHITECTURE ──────────────────────────────────────────────
+  // ─── CANONICAL ROUTING ARCHITECTURE ──────────────────────────────────
   //
-  // 1. POS routes (/admin/pos, /admin/pos/*)
+  // 1. POS canonical entry (/admin/pos, /admin/pos/*)
   //    Always accessible directly. The POS page and POS APIs independently
-  //    verify the registered POS device in the database.
+  //    verify the registered POS device in PostgreSQL.
+  //    - Registered active device → POS register
+  //    - Unregistered / invalid → POS pairing code screen
   //
   // 2. Custom Admin Entry Path (e.g. /lovekitchen or configured access path)
   //    - If Admin session present → redirect to /admin
-  //    - If unauthenticated → rewrite to /admin/login
+  //    - Unauthenticated → rewrite to /admin/login
   //
   // 3. Admin Login Page (/admin/login)
-  //    - Always serves the login page directly (no automatic redirect to /admin/pos).
+  //    - If Admin session present → redirect to /admin
+  //    - Unauthenticated → serve login page directly (200 OK)
   //
-  // 4. Admin Dashboard & Protected Sub-routes (/admin, /admin/products, /admin/settings, etc.)
-  //    - If Admin session present → allow access to /admin
-  //    - If missing or unauthenticated → redirect to /admin/login (NEVER /admin/pos).
+  // 4. Admin Portal & Protected Sub-routes (/admin, /admin/products, /admin/settings, etc.)
+  //    - If Admin session present → allow access to Admin dashboard (200 OK)
+  //    - If missing, invalid, or no admin session → redirect strictly to /admin/login (307)
+  //    - Absence of an admin session NEVER converts /admin into /admin/pos
   //
   // 5. Storefront & Public Routes
   //    - Pass through.
@@ -57,17 +61,20 @@ export async function proxy(request: NextRequest) {
 
   // 3. Admin Login Page (/admin/login)
   if (pathname === "/admin/login") {
+    if (hasAdminCookie) {
+      return withNoCache(NextResponse.redirect(new URL("/admin", request.url)));
+    }
     return withNoCache(NextResponse.next());
   }
 
-  // 4. Admin Dashboard & Protected Sub-routes (/admin, /admin/products, /admin/settings, etc.)
+  // 4. Admin Portal & Protected Sub-routes (/admin, /admin/products, /admin/settings, /admin/devices, /admin/security, /admin/orders, /admin/categories)
   if (pathname === "/admin" || pathname.startsWith("/admin/")) {
-    // If admin session cookie present, pass through to allow page/server-side validation
+    // If admin session cookie present, pass through to allow page & server-side validation
     if (hasAdminCookie) {
       return withNoCache(NextResponse.next());
     }
 
-    // Unauthenticated visitor (regardless of whether a POS cookie exists) → redirect to admin login
+    // Unauthenticated visitor (no cookies, stale POS cookie, etc.) → redirect strictly to /admin/login
     return withNoCache(NextResponse.redirect(new URL("/admin/login", request.url)));
   }
 

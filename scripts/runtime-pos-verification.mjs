@@ -274,13 +274,13 @@ async function main() {
     const pos01MutateSetting = await req("/api/settings", { method: "PUT", jar: pos01Jar, body: { restaurantName: "Hacked" } });
     assert(pos01MutateSetting.status === 401, "Registered POS-01 cannot mutate settings (401 Unauthorized)");
 
-    // Dual-credential test: Admin logs in on a browser that has a POS cookie -> both systems work independently
-    const dualBrowserJar = pos01Jar.clone("dual-admin-pos-browser");
-    await adminLogin(dualBrowserJar, adminPassword);
-    const dualAdminPage = await req("/admin", { jar: dualBrowserJar });
-    assert(dualAdminPage.status === 200, "Dual-credential browser visiting /admin sees Admin Dashboard (200 OK)");
-    const dualPosOrders = await req("/api/pos/orders", { jar: dualBrowserJar });
-    assert(dualPosOrders.status === 200, "Dual-credential browser accessing /api/pos/orders retains POS register access");
+    // 7. POS Terminal Isolation: POS browser attempting admin login is blocked (403 Forbidden)
+    const posAdminLoginAttempt = await req("/api/auth/login", {
+      method: "POST",
+      jar: pos01Jar,
+      body: { password: adminPassword },
+    });
+    assert(posAdminLoginAttempt.status === 403, "Registered POS browser cannot elevate to Admin via POST /api/auth/login (403 Forbidden)");
 
     // 7. POS-01 can directly access POS orders WITHOUT staff login
     const pos01OrdersDirect = await req("/api/pos/orders", { jar: pos01Jar });

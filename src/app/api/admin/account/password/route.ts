@@ -3,7 +3,6 @@ import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAdminUserFromRequest, invalidateAllAdminSessions } from "@/lib/auth";
 import { verifyPassword, hashPassword } from "@/lib/password";
-import { sendSecurityAlertEmail } from "@/lib/emailService";
 import { recordAuditLog } from "@/lib/auditLog";
 
 export async function POST(request: NextRequest) {
@@ -60,12 +59,6 @@ export async function POST(request: NextRequest) {
 
     // Invalidate all open sessions across other devices while preserving the current active session
     await invalidateAllAdminSessions(admin.id, currentSessionId);
-
-    await sendSecurityAlertEmail(
-      admin.email,
-      "Your Administrator Password Has Been Updated",
-      "Your administrator dashboard password was successfully updated. All other active computer sessions have been invalidated."
-    );
 
     await recordAuditLog("PASSWORD_CHANGED", {
       adminId: admin.id,

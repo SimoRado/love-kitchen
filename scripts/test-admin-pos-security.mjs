@@ -114,16 +114,17 @@ async function main() {
   console.log("STARTING FINAL ADMIN & POS AUTHENTICATION & ISOLATION TEST SUITE");
   console.log("====================================================================\n");
 
+  // Hoisted above try/finally so the finally cleanup block can access them
+  const initialAdminPassword = loadEnvValue("ADMIN_PASSWORD") || "RestaurantAdmin2026!";
+  let currentAdminPassword = initialAdminPassword;
+  const adminEmail = (loadEnvValue("ADMIN_EMAIL") || "admin@lovekitchen.ma").toLowerCase();
+
   try {
-    const initialAdminPassword = loadEnvValue("ADMIN_PASSWORD") || "RestaurantAdmin2026!";
-    let currentAdminPassword = initialAdminPassword;
-    const adminEmail = (loadEnvValue("ADMIN_EMAIL") || "admin@lovekitchen.ma").toLowerCase();
 
     // Clean any leftover test records from past runs
     await prisma.deviceRegistrationCode.deleteMany({});
     await prisma.device.deleteMany({});
     await prisma.adminSession.deleteMany({});
-    await prisma.adminOtp.deleteMany({});
     await prisma.adminRateLimit.deleteMany({});
 
     // Ensure default admin user is configured with the expected initial password
@@ -350,34 +351,53 @@ async function main() {
     assert(reopenedPosOrders.status === 200 && Array.isArray(reopenedPosOrders.json?.data), "POS-01 remains registered after simulated restart (orders accessible directly)");
 
     // ─────────────────────────────────────────────────────────────────
-    // SECTION 4: POS TERMINAL ISOLATION & DECOUPLED AUTHENTICATION
+    // SECTION 4: POS TERMINAL ISOLATION & CANONICAL ROUTING RULES
     // ─────────────────────────────────────────────────────────────────
-    console.log("\n--- 4. Testing POS Terminal Isolation & Independent Authentication ---");
+    console.log("\n--- 4. Testing POS Terminal Isolation & Canonical Routing Rules ---");
 
-    // POS cookie only: visiting /admin & sub-routes redirects to /admin/login (NOT /admin/pos)
+    // TEST: Unauthenticated with POS cookie navigating to /admin redirects to /admin/login
     const posToAdmin = await req("/admin", { jar: pos01Jar });
-    assert(posToAdmin.status === 307 && posToAdmin.location?.includes("/admin/login"), "POS visiting /admin redirects to /admin/login (NOT /admin/pos)");
+    assert(posToAdmin.status === 307 && posToAdmin.location?.includes("/admin/login"), "Unauthenticated /admin redirects to /admin/login");
 
     const posToProducts = await req("/admin/products", { jar: pos01Jar });
-    assert(posToProducts.status === 307 && posToProducts.location?.includes("/admin/login"), "POS visiting /admin/products redirects to /admin/login");
+    assert(posToProducts.status === 307 && posToProducts.location?.includes("/admin/login"), "Unauthenticated /admin/products redirects to /admin/login");
 
     const posToCategories = await req("/admin/categories", { jar: pos01Jar });
-    assert(posToCategories.status === 307 && posToCategories.location?.includes("/admin/login"), "POS visiting /admin/categories redirects to /admin/login");
+    assert(posToCategories.status === 307 && posToCategories.location?.includes("/admin/login"), "Unauthenticated /admin/categories redirects to /admin/login");
 
     const posToSettings = await req("/admin/settings", { jar: pos01Jar });
-    assert(posToSettings.status === 307 && posToSettings.location?.includes("/admin/login"), "POS visiting /admin/settings redirects to /admin/login");
+    assert(posToSettings.status === 307 && posToSettings.location?.includes("/admin/login"), "Unauthenticated /admin/settings redirects to /admin/login");
 
     const posToOrders = await req("/admin/orders", { jar: pos01Jar });
-    assert(posToOrders.status === 307 && posToOrders.location?.includes("/admin/login"), "POS visiting /admin/orders redirects to /admin/login");
+    assert(posToOrders.status === 307 && posToOrders.location?.includes("/admin/login"), "Unauthenticated /admin/orders redirects to /admin/login");
 
     const posToDevices = await req("/admin/devices", { jar: pos01Jar });
-    assert(posToDevices.status === 307 && posToDevices.location?.includes("/admin/login"), "POS visiting /admin/devices redirects to /admin/login");
+    assert(posToDevices.status === 307 && posToDevices.location?.includes("/admin/login"), "Unauthenticated /admin/devices redirects to /admin/login");
 
     const posToSecurity = await req("/admin/security", { jar: pos01Jar });
-    assert(posToSecurity.status === 307 && posToSecurity.location?.includes("/admin/login"), "POS visiting /admin/security redirects to /admin/login");
+    assert(posToSecurity.status === 307 && posToSecurity.location?.includes("/admin/login"), "Unauthenticated /admin/security redirects to /admin/login");
 
     const posToLogin = await req("/admin/login", { jar: pos01Jar });
-    assert(posToLogin.status === 200, "POS visiting /admin/login loads login page (200 OK, not redirected to POS)");
+    assert(posToLogin.status === 200, "Unauthenticated /admin/login serves login page (200 OK)");
+
+    // TEST 10: Invalid/stale POS cookie cannot hijack /admin
+    const staleJar = new CookieJar("stale-pos-cookie-browser");
+    staleJar.cookies.set("resto_pos_device", "POS-NONEXISTENT.staleinvalidcredential12345");
+    const staleToAdmin = await req("/admin", { jar: staleJar });
+    assert(staleToAdmin.status === 307 && staleToAdmin.location?.includes("/admin/login"), "Stale/invalid POS cookie visiting /admin redirects to /admin/login (NOT /admin/pos)");
+
+    // TEST 11: Explicit No-cookie regression
+    const noCookieJar = new CookieJar("clean-no-cookie-browser");
+    const noCookieToAdmin = await req("/admin", { jar: noCookieJar });
+    assert(noCookieToAdmin.status === 307 && noCookieToAdmin.location?.includes("/admin/login"), "Completely clean browser visiting /admin redirects to /admin/login (NOT /admin/pos)");
+
+    // TEST 9: POS terminal cannot use POST /api/auth/login to elevate to admin (403 Forbidden)
+    const posAttemptAdminLogin = await req("/api/auth/login", {
+      method: "POST",
+      jar: pos01Jar,
+      body: { email: adminEmail, password: currentAdminPassword },
+    });
+    assert(posAttemptAdminLogin.status === 403, "POS terminal cannot elevate to Admin via POST /api/auth/login (403 Forbidden)");
 
     // POS cannot call Admin APIs without admin session
     const posCallDevicesApi = await req("/api/devices", { jar: pos01Jar });
@@ -400,90 +420,36 @@ async function main() {
     assert(posDirectOrders.status === 200 && Array.isArray(posDirectOrders.json?.data), "POS terminal can call GET /api/pos/orders");
 
     // ─────────────────────────────────────────────────────────────────
-    // DUAL-CREDENTIAL INDEPENDENCE TESTS (BOTH COOKIES PRESENT)
+    // SECTION 4.1: ADMIN PC & INDEPENDENT AUTHENTICATION TESTS
     // ─────────────────────────────────────────────────────────────────
-    console.log("\n--- Testing Both Credentials Present Simultaneously ---");
-    const dualJar = pos01Jar.clone("dual-admin-pos-browser");
-    const dualLogin = await req("/api/auth/login", {
+    console.log("\n--- Testing Admin PC & Independent Authentication ---");
+
+    // Admin PC (pure admin context, no POS cookie) logs in and functions normally
+    assert(adminPcJar.cookies.has("resto_admin_session"), "Admin PC has active admin session");
+    assert(!adminPcJar.cookies.has("resto_pos_device"), "Admin PC has no POS cookie");
+    const adminPcNav = await req("/admin", { jar: adminPcJar });
+    assert(adminPcNav.status === 200, "Admin PC visiting /admin sees Admin Dashboard (200 OK)");
+
+    // Authenticated admin visiting /admin/login redirects to /admin
+    const adminLoginNav = await req("/admin/login", { jar: adminPcJar });
+    assert(adminLoginNav.status === 307 && adminLoginNav.location?.includes("/admin"), "Authenticated Admin visiting /admin/login redirects to /admin");
+
+    // Admin logout test using a dedicated session
+    const logoutTestJar = new CookieJar("admin-pc-logout-tester");
+    await req("/api/auth/login", {
       method: "POST",
-      jar: dualJar,
+      jar: logoutTestJar,
       body: { email: adminEmail, password: currentAdminPassword },
     });
-    assert(dualLogin.status === 200 && dualLogin.json?.success, "Admin login succeeds on browser with existing POS cookie");
-    assert(dualJar.cookies.has("resto_admin_session"), "Dual browser holds resto_admin_session");
-    assert(dualJar.cookies.has("resto_pos_device"), "Dual browser holds resto_pos_device");
-
-    // Admin routes on dual browser render Admin Dashboard & Sub-pages
-    const dualAdmin = await req("/admin", { jar: dualJar });
-    assert(dualAdmin.status === 200, "Dual browser visiting /admin sees Admin Dashboard (200 OK)");
-
-    const dualProducts = await req("/admin/products", { jar: dualJar });
-    assert(dualProducts.status === 200, "Dual browser visiting /admin/products sees Admin Products (200 OK)");
-
-    const dualSettings = await req("/admin/settings", { jar: dualJar });
-    assert(dualSettings.status === 200, "Dual browser visiting /admin/settings sees Admin Settings (200 OK)");
-
-    const dualDevices = await req("/admin/devices", { jar: dualJar });
-    assert(dualDevices.status === 200, "Dual browser visiting /admin/devices sees Device Management (200 OK)");
-
-    const dualSecurity = await req("/admin/security", { jar: dualJar });
-    assert(dualSecurity.status === 200, "Dual browser visiting /admin/security sees Account & Security (200 OK)");
-
-    // POS route on dual browser renders POS Register
-    const dualPos = await req("/admin/pos", { jar: dualJar });
-    assert(dualPos.status === 200, "Dual browser visiting /admin/pos sees POS Register (200 OK)");
-
-    // APIs on dual browser
-    const dualDevicesApi = await req("/api/devices", { jar: dualJar });
-    assert(dualDevicesApi.status === 200 && dualDevicesApi.json?.success, "Dual browser can access Admin APIs (GET /api/devices)");
-
-    const dualPosApi = await req("/api/pos/orders", { jar: dualJar });
-    assert(dualPosApi.status === 200 && Array.isArray(dualPosApi.json?.data), "Dual browser can access POS APIs (GET /api/pos/orders)");
-
-    // ─────────────────────────────────────────────────────────────────
-    // EXPLICIT COOKIE DELETION & RE-AUTHENTICATION TESTS
-    // ─────────────────────────────────────────────────────────────────
-    console.log("\n--- Testing Explicit Admin Cookie Deletion & Re-Authentication ---");
-    const cookieDeleteJar = dualJar.clone("cookie-delete-browser");
-    
-    // Delete ONLY resto_admin_session, keep resto_pos_device
-    cookieDeleteJar.cookies.delete("resto_admin_session");
-    assert(!cookieDeleteJar.cookies.has("resto_admin_session"), "resto_admin_session deleted from browser");
-    assert(cookieDeleteJar.cookies.has("resto_pos_device"), "resto_pos_device remains in browser");
-
-    // Navigating to /admin with only POS cookie must redirect to /admin/login (NOT /admin/pos)
-    const deletedAdminNav = await req("/admin", { jar: cookieDeleteJar });
-    assert(deletedAdminNav.status === 307 && deletedAdminNav.location?.includes("/admin/login"), "Admin cookie deleted: /admin redirects to /admin/login (NOT /admin/pos)");
-
-    // POS Register still works directly
-    const deletedPosNav = await req("/admin/pos", { jar: cookieDeleteJar });
-    assert(deletedPosNav.status === 200, "Admin cookie deleted: /admin/pos remains accessible directly (200 OK)");
-
-    // Administrator logs in again using email + password
-    const reLogin = await req("/api/auth/login", {
-      method: "POST",
-      jar: cookieDeleteJar,
-      body: { email: adminEmail, password: currentAdminPassword },
-    });
-    assert(reLogin.status === 200 && reLogin.json?.success, "Administrator logs in again successfully");
-    assert(cookieDeleteJar.cookies.has("resto_admin_session"), "Received fresh resto_admin_session cookie");
-
-    // Admin dashboard accessible again
-    const reAdminNav = await req("/admin", { jar: cookieDeleteJar });
-    assert(reAdminNav.status === 200, "Re-authenticated admin visits /admin -> 200 OK");
-
-    // Admin logout on dual browser clears ONLY admin session and preserves POS registration
-    const logoutJar = dualJar.clone("logout-test-browser");
-    const logoutRes = await req("/api/auth/logout", { method: "POST", jar: logoutJar });
+    const logoutRes = await req("/api/auth/logout", { method: "POST", jar: logoutTestJar });
     assert(logoutRes.status === 200, "Admin logout succeeded");
-    assert(!logoutJar.cookies.has("resto_admin_session"), "resto_admin_session was cleared on logout");
-    assert(logoutJar.cookies.has("resto_pos_device"), "resto_pos_device was PRESERVED on logout");
+    assert(!logoutTestJar.cookies.has("resto_admin_session"), "resto_admin_session was cleared on logout");
 
-    const postLogoutAdmin = await req("/admin", { jar: logoutJar });
-    assert(postLogoutAdmin.status === 307 && postLogoutAdmin.location?.includes("/admin/login"), "Post-logout browser with POS cookie redirects to /admin/login (NOT /admin/pos)");
+    const postLogoutAdmin = await req("/admin", { jar: logoutTestJar });
+    assert(postLogoutAdmin.status === 307 && postLogoutAdmin.location?.includes("/admin/login"), "Post-logout Admin PC redirects to /admin/login");
 
-    const postLogoutPos = await req("/admin/pos", { jar: logoutJar });
-    assert(postLogoutPos.status === 200, "Post-logout browser with POS cookie retains direct POS Register access");
+    const postLogoutPos = await req("/admin/pos", { jar: pos01Jar });
+    assert(postLogoutPos.status === 200, "Registered POS browser retains direct POS Register access (200 OK)");
 
     // ─────────────────────────────────────────────────────────────────
     // SECTION 5: MULTI-POS SUPPORT & DEVICE LIFECYCLE
@@ -633,38 +599,39 @@ async function main() {
     pass("Password reverted cleanly to initial environment password");
 
     // ─────────────────────────────────────────────────────────────────
-    // SECTION 7: FORGOT PASSWORD & EMAIL CHANGE OTP FLOWS
+    // SECTION 7: SINGLE-STEP EMAIL CHANGE FLOW (PASSWORD-ONLY)
     // ─────────────────────────────────────────────────────────────────
-    console.log("\n--- 7. Testing OTP Flows (Forgot Password & Email Change) ---");
+    console.log("\n--- 7. Testing Single-Step Email Change Flow (Password-Only) ---");
 
-    // Forgot Password: Request OTP
-    const forgotOtpReq = await req("/api/auth/forgot-password/request-otp", {
-      method: "POST",
-      body: { email: adminEmail },
-    });
-    assert(forgotOtpReq.status === 200 && forgotOtpReq.json?.success, "Forgot password OTP request succeeded");
-
-    // Lookup OTP from DB (simulating reading emailed code)
-    const dbForgotOtp = await prisma.adminOtp.findFirst({
-      where: { type: "PASSWORD_RESET", usedAt: null },
-      orderBy: { createdAt: "desc" },
-    });
-    assert(Boolean(dbForgotOtp), "Password reset OTP created in database");
-
-    // Email Change: Request OTP
     const newEmailTarget = "newowner@lovekitchen.ma";
-    const emailOtpReq = await req("/api/admin/account/email/request-otp", {
+
+    // Invalid password rejected
+    const badPassEmailReq = await req("/api/admin/account/email", {
+      method: "POST",
+      jar: adminPcJar,
+      body: { currentPassword: "wrong-password", newEmail: newEmailTarget },
+    });
+    assert(badPassEmailReq.status === 401, "Email change with incorrect password rejected (401 Unauthorized)");
+
+    // Valid single-step email change
+    const validEmailReq = await req("/api/admin/account/email", {
       method: "POST",
       jar: adminPcJar,
       body: { currentPassword: currentAdminPassword, newEmail: newEmailTarget },
     });
-    assert(emailOtpReq.status === 200 && emailOtpReq.json?.success, "Email change OTP request succeeded", `status: ${emailOtpReq.status}, text: ${emailOtpReq.text}`);
+    assert(validEmailReq.status === 200 && validEmailReq.json?.success, "Single-step email change succeeded (200 OK)");
 
-    const dbEmailOtp = await prisma.adminOtp.findFirst({
-      where: { type: "EMAIL_CHANGE", usedAt: null },
-      orderBy: { createdAt: "desc" },
+    // Verify DB updated directly
+    const dbEmailCheck = await prisma.adminUser.findFirst();
+    assert(dbEmailCheck.email === newEmailTarget, "Admin email updated directly in PostgreSQL without OTP");
+
+    // Revert back to original email
+    const revertEmailReq = await req("/api/admin/account/email", {
+      method: "POST",
+      jar: adminPcJar,
+      body: { currentPassword: currentAdminPassword, newEmail: adminEmail },
     });
-    assert(Boolean(dbEmailOtp), "Email change OTP created in database");
+    assert(revertEmailReq.status === 200, "Admin email cleanly reverted to initial email");
 
     console.log(`\n====================================================================`);
     console.log(`ALL ${results.filter((r) => r.ok).length} ADMIN & POS AUTHENTICATION, ISOLATION & PERSISTENCE CHECKS PASSED!`);
@@ -677,7 +644,6 @@ async function main() {
       });
       await prisma.deviceRegistrationCode.deleteMany({});
       await prisma.device.deleteMany({});
-      await prisma.adminOtp.deleteMany({});
     } catch {}
     await prisma.$disconnect();
   }

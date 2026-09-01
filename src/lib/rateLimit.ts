@@ -52,6 +52,69 @@ export async function checkRateLimit(
   }
 }
 
+/**
+ * Check whether an IP has exceeded failed login attempts without incrementing the counter.
+ */
+export async function checkFailedLoginRateLimit(
+  key: string,
+  maxFailures = 5
+): Promise<{ allowed: boolean; resetAt?: Date }> {
+  const now = new Date();
+  try {
+    const existing = await prisma.adminRateLimit.findUnique({
+      where: { key },
+    });
+
+    if (!existing || existing.resetAt <= now) {
+      return { allowed: true };
+    }
+
+    if (existing.count >= maxFailures) {
+      return { allowed: false, resetAt: existing.resetAt };
+    }
+
+    return { allowed: true };
+  } catch (error) {
+    console.error("Failed login rate limit check error:", error);
+    return { allowed: true };
+  }
+}
+
+/**
+ * Record a failed login attempt against the IP.
+ */
+export async function recordFailedLogin(
+  key: string,
+  windowSeconds = 300
+): Promise<void> {
+  const now = new Date();
+  const resetAt = new Date(now.getTime() + windowSeconds * 1000);
+
+  try {
+    const existing = await prisma.adminRateLimit.findUnique({
+      where: { key },
+    });
+
+    if (!existing || existing.resetAt <= now) {
+      await prisma.adminRateLimit.upsert({
+        where: { key },
+        create: { key, count: 1, resetAt },
+        update: { count: 1, resetAt },
+      });
+    } else {
+      await prisma.adminRateLimit.update({
+        where: { key },
+        data: { count: { increment: 1 } },
+      });
+    }
+  } catch (error) {
+    console.error("Record failed login error:", error);
+  }
+}
+
+/**
+ * Reset/clear rate limit upon successful authentication.
+ */
 export async function resetRateLimit(key: string): Promise<void> {
   try {
     await prisma.adminRateLimit.deleteMany({
@@ -61,4 +124,3 @@ export async function resetRateLimit(key: string): Promise<void> {
     console.error("Rate limit reset error:", error);
   }
 }
-

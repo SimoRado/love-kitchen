@@ -4,7 +4,7 @@ import { findAdminByEmail, getOrCreateDefaultAdmin } from "@/lib/adminAccount";
 import { verifyPassword } from "@/lib/password";
 import { createAdminSession, setAdminSessionCookie } from "@/lib/auth";
 import { getDeviceFromRequest } from "@/lib/deviceAuth";
-import { checkRateLimit } from "@/lib/rateLimit";
+import { checkFailedLoginRateLimit, recordFailedLogin, resetRateLimit } from "@/lib/rateLimit";
 import { recordAuditLog } from "@/lib/auditLog";
 
 export async function POST(request: NextRequest) {
@@ -14,13 +14,25 @@ export async function POST(request: NextRequest) {
       request.headers.get("x-real-ip") ||
       "127.0.0.1";
 
-    // 1. Distributed Rate Limiting (max 5 attempts per minute per IP)
-    const rateLimit = await checkRateLimit(`login:ip:${ip}`, 5, 60);
-    if (!rateLimit.allowed) {
+    // 0. POS Device Terminal Lock: Active registered POS devices cannot elevate to Admin
+    const activePosDevice = await getDeviceFromRequest(request);
+    if (activePosDevice && activePosDevice.status === "ACTIVE") {
       return NextResponse.json(
         {
           success: false,
-          error: "Too many login attempts. Please wait a minute before trying again.",
+          error: "Administrator login is not available on registered POS terminals.",
+        },
+        { status: 403 }
+      );
+    }
+
+    // 1. Distributed Failed-Login Rate Limiting (max 5 failed attempts per 5 minutes per IP)
+    const failedLimit = await checkFailedLoginRateLimit(`login:failed:ip:${ip}`, 5);
+    if (!failedLimit.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Too many failed login attempts. Please wait 5 minutes before trying again.",
         },
         { status: 429 }
       );
@@ -44,6 +56,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!admin) {
+      await recordFailedLogin(`login:failed:ip:${ip}`, 300);
       await recordAuditLog("LOGIN_FAILED", {
         details: { attemptedEmail: typeof email === "string" ? email.trim().toLowerCase() : "default", reason: "Account not found" },
         req: request,
@@ -56,6 +69,7 @@ export async function POST(request: NextRequest) {
 
     const isValidPassword = await verifyPassword(password, admin.passwordHash);
     if (!isValidPassword) {
+      await recordFailedLogin(`login:failed:ip:${ip}`, 300);
       await recordAuditLog("LOGIN_FAILED", {
         adminId: admin.id,
         details: { attemptedEmail: admin.email, reason: "Incorrect password" },
@@ -67,7 +81,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 3. Create database-backed multi-device session
+    // 2. Successful Login: Clear failed login tracker
+    await resetRateLimit(`login:failed:ip:${ip}`);
+
+    // 3. Create database-backed multi-device session (30 days persistent)
     const { token } = await createAdminSession(admin.id, request);
     await recordAuditLog("LOGIN_SUCCESS", {
       adminId: admin.id,

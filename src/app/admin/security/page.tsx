@@ -40,10 +40,8 @@ export default function AdminSecurityPage() {
 
   // Email update modal state
   const [emailModalOpen, setEmailModalOpen] = useState(false);
-  const [emailStep, setEmailStep] = useState<"REQUEST" | "VERIFY">("REQUEST");
   const [emailCurrentPass, setEmailCurrentPass] = useState("");
   const [newEmail, setNewEmail] = useState("");
-  const [emailOtp, setEmailOtp] = useState("");
   const [emailLoading, setEmailLoading] = useState(false);
   const [emailError, setEmailError] = useState("");
   const [emailSuccess, setEmailSuccess] = useState("");
@@ -97,7 +95,7 @@ export default function AdminSecurityPage() {
     }
   };
 
-  const handleRequestEmailOtp = async (e: React.FormEvent) => {
+  const handleEmailChange = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!emailCurrentPass || !newEmail) {
       setEmailError("Please provide your current password and new email address.");
@@ -109,59 +107,28 @@ export default function AdminSecurityPage() {
       setEmailError("");
       setEmailSuccess("");
 
-      const res = await fetch("/api/admin/account/email/request-otp", {
+      const res = await fetch("/api/admin/account/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currentPassword: emailCurrentPass, newEmail: newEmail.trim() }),
+        body: JSON.stringify({
+          currentPassword: emailCurrentPass,
+          newEmail: newEmail.trim(),
+        }),
       });
 
       const data = await res.json();
       if (data.success) {
-        setEmailSuccess(data.message || "Verification code sent to new email.");
-        setEmailStep("VERIFY");
-      } else {
-        setEmailError(data.error || "Failed to send verification code.");
-      }
-    } catch {
-      setEmailError("Network error. Please try again.");
-    } finally {
-      setEmailLoading(false);
-    }
-  };
-
-  const handleVerifyEmailOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!emailOtp.trim()) {
-      setEmailError("Please enter the 6-digit verification code.");
-      return;
-    }
-
-    try {
-      setEmailLoading(true);
-      setEmailError("");
-      setEmailSuccess("");
-
-      const res = await fetch("/api/admin/account/email/verify-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ otp: emailOtp.trim(), newEmail: newEmail.trim() }),
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        setEmailSuccess("Email updated successfully!");
+        setEmailSuccess("Administrator email updated successfully!");
         setProfile((prev) => (prev ? { ...prev, email: data.data.email } : prev));
         setTimeout(() => {
           setEmailModalOpen(false);
-          setEmailStep("REQUEST");
           setEmailCurrentPass("");
           setNewEmail("");
-          setEmailOtp("");
           setEmailSuccess("");
         }, 1500);
         fetchData();
       } else {
-        setEmailError(data.error || "Failed to verify code.");
+        setEmailError(data.error || "Failed to update email address.");
       }
     } catch {
       setEmailError("Network error. Please try again.");
@@ -347,10 +314,8 @@ export default function AdminSecurityPage() {
               onClick={() => {
                 setEmailError("");
                 setEmailSuccess("");
-                setEmailStep("REQUEST");
                 setEmailCurrentPass("");
                 setNewEmail("");
-                setEmailOtp("");
                 setEmailModalOpen(true);
               }}
               className="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-orange-50/50 border border-slate-200 hover:border-orange-300 text-slate-800 hover:text-orange-700 text-xs font-bold shadow-2xs transition-all cursor-pointer flex items-center justify-center gap-2"
@@ -657,93 +622,53 @@ export default function AdminSecurityPage() {
               </div>
             )}
 
-            {emailStep === "REQUEST" ? (
-              <form onSubmit={handleRequestEmailOtp} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Current Password
-                  </label>
-                  <input
-                    type="password"
-                    value={emailCurrentPass}
-                    onChange={(e) => setEmailCurrentPass(e.target.value)}
-                    placeholder="Enter current password"
-                    required
-                    className="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-sm bg-white text-slate-900 transition-all focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 shadow-2xs placeholder:text-slate-400"
-                  />
-                </div>
+            <form onSubmit={handleEmailChange} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Current Password
+                </label>
+                <input
+                  type="password"
+                  value={emailCurrentPass}
+                  onChange={(e) => setEmailCurrentPass(e.target.value)}
+                  placeholder="Enter current password"
+                  required
+                  autoFocus
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-sm bg-white text-slate-900 transition-all focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 shadow-2xs placeholder:text-slate-400"
+                />
+              </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    New Email Address
-                  </label>
-                  <input
-                    type="email"
-                    value={newEmail}
-                    onChange={(e) => setNewEmail(e.target.value)}
-                    placeholder="new-admin@lovekitchen.ma"
-                    required
-                    className="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-sm bg-white text-slate-900 transition-all focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 shadow-2xs placeholder:text-slate-400"
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  New Email Address
+                </label>
+                <input
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  placeholder="new-admin@lovekitchen.ma"
+                  required
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-sm bg-white text-slate-900 transition-all focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 shadow-2xs placeholder:text-slate-400"
+                />
+              </div>
 
-                <div className="flex gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setEmailModalOpen(false)}
-                    className="w-1/2 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 shadow-2xs transition-colors cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={emailLoading}
-                    className="w-1/2 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white text-xs font-bold shadow-xs transition-all disabled:opacity-50 cursor-pointer"
-                  >
-                    {emailLoading ? "Sending Code..." : "Send 6-Digit Code"}
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <form onSubmit={handleVerifyEmailOtp} className="space-y-4">
-                <p className="text-xs text-slate-600">
-                  Enter the 6-digit verification code dispatched to <strong className="text-slate-900 font-bold">{newEmail}</strong>.
-                </p>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    6-Digit Verification Code
-                  </label>
-                  <input
-                    type="text"
-                    maxLength={6}
-                    value={emailOtp}
-                    onChange={(e) => setEmailOtp(e.target.value.replace(/\D/g, ""))}
-                    placeholder="123456"
-                    required
-                    autoFocus
-                    className="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-sm bg-white text-slate-900 transition-all focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 shadow-2xs tracking-widest text-center text-base font-mono font-bold placeholder:text-slate-300"
-                  />
-                </div>
-
-                <div className="flex gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setEmailStep("REQUEST")}
-                    className="w-1/2 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 shadow-2xs transition-colors cursor-pointer"
-                  >
-                    Back
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={emailLoading}
-                    className="w-1/2 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white text-xs font-bold shadow-xs transition-all disabled:opacity-50 cursor-pointer"
-                  >
-                    {emailLoading ? "Verifying..." : "Verify & Save Email"}
-                  </button>
-                </div>
-              </form>
-            )}
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEmailModalOpen(false)}
+                  className="w-1/2 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 shadow-2xs transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={emailLoading}
+                  className="w-1/2 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white text-xs font-bold shadow-xs transition-all disabled:opacity-50 cursor-pointer"
+                >
+                  {emailLoading ? "Updating..." : "Update Email"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
