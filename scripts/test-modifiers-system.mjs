@@ -9,7 +9,6 @@ async function main() {
 
   // 1. Authenticate Admin
   console.log("--- 1. Admin Authentication ---");
-  await prisma.adminRateLimit.deleteMany({}).catch(() => {});
   const loginRes = await fetch(`${baseUrl}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

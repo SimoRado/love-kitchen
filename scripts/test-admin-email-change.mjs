@@ -11,7 +11,6 @@
  *   7. Database AdminUser.email immediate persistence (no OTP, no email sent)
  *   8. Audit log recording for EMAIL_CHANGED
  *   9. Clean email reversion back to baseline
- *   10. Rate limiting enforcement on brute-force attempts
  */
 
 import fs from "node:fs";
@@ -119,9 +118,6 @@ async function main() {
     const admin = await prisma.adminUser.findFirst();
     assert(admin !== null, "AdminUser exists in database");
 
-    // Clear any rate limits from prior test runs
-    await prisma.adminRateLimit.deleteMany({}).catch(() => {});
-
     // ─────────────────────────────────────────────────────────────────
     // SECTION 1: AUTHENTICATION & ACCESS CONTROL
     // ─────────────────────────────────────────────────────────────────
@@ -196,8 +192,6 @@ async function main() {
     // ─────────────────────────────────────────────────────────────────
     console.log("\n--- 3. Single-Step Email Update ---");
 
-    await prisma.adminRateLimit.deleteMany({}).catch(() => {});
-
     const successReq = await req("/api/admin/account/email", {
       method: "POST",
       jar: adminJar,
@@ -252,7 +246,6 @@ async function main() {
       await prisma.adminUser.updateMany({
         data: { email: initialAdminEmail, passwordHash: initialHash },
       });
-      await prisma.adminRateLimit.deleteMany({});
     } catch {}
     await prisma.$disconnect();
   }

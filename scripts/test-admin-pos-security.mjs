@@ -125,7 +125,6 @@ async function main() {
     await prisma.deviceRegistrationCode.deleteMany({});
     await prisma.device.deleteMany({});
     await prisma.adminSession.deleteMany({});
-    await prisma.adminRateLimit.deleteMany({});
 
     // Ensure default admin user is configured with the expected initial password
     const initialHash = await bcrypt.hash(initialAdminPassword, 12);
@@ -573,7 +572,6 @@ async function main() {
     assert(laptopRevoked.status === 401, "Other computer session (laptop) was successfully invalidated by password change");
 
     // Sign in with new password works
-    await prisma.adminRateLimit.deleteMany({}).catch(() => {});
     currentAdminPassword = newAdminPass;
     const newPassLogin = await req("/api/auth/login", {
       method: "POST",
@@ -583,7 +581,6 @@ async function main() {
     assert(newPassLogin.status === 200 && newPassLogin.json?.success, "Admin can log in with new password");
 
     // Old password no longer works
-    await prisma.adminRateLimit.deleteMany({}).catch(() => {});
     const oldPassLogin = await req("/api/auth/login", {
       method: "POST",
       body: { email: adminEmail, password: initialAdminPassword },

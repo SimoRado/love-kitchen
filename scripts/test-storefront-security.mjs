@@ -31,7 +31,6 @@ async function runSuite() {
 
   // 2. Admin Authentication Flow
   console.log("\n--- 2. Testing Admin Login Flow ---");
-  await prisma.adminRateLimit.deleteMany({}).catch(() => {});
   const badLogin = await fetch(`${baseUrl}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

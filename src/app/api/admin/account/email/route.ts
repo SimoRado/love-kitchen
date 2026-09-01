@@ -3,7 +3,6 @@ import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAdminUserFromRequest } from "@/lib/auth";
 import { verifyPassword } from "@/lib/password";
-import { checkRateLimit } from "@/lib/rateLimit";
 import { recordAuditLog } from "@/lib/auditLog";
 
 export async function POST(request: NextRequest) {
@@ -13,23 +12,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: "Unauthorized. Active admin session required." },
         { status: 401 }
-      );
-    }
-
-    const ip =
-      request.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
-      request.headers.get("x-real-ip") ||
-      "127.0.0.1";
-
-    // Rate limit: 10 attempts per 5 minutes per IP
-    const rateLimit = await checkRateLimit(`change-email:ip:${ip}`, 10, 300);
-    if (!rateLimit.allowed) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Too many email change attempts. Please wait a few minutes before trying again.",
-        },
-        { status: 429 }
       );
     }
 

@@ -2,7 +2,7 @@
  * Dedicated Admin Authentication Test Suite
  *
  * Tests the complete admin login lifecycle:
- *   1. Database table existence (AdminUser, AdminRateLimit, AdminSession)
+ *   1. Database table existence (AdminUser, AdminSession, AdminAuditLog)
  *   2. AdminUser record integrity
  *   3. Password hash verification
  *   4. Login with valid credentials
@@ -12,7 +12,7 @@
  *   8. Clean browser → /admin → /admin/login
  *   9. POS cookie does NOT override admin session
  *   10. Stale POS cookie does NOT redirect /admin to /admin/pos
- *   11. Rate limiting does not crash authentication (no 500)
+ *   11. Unthrottled authentication on multiple failed attempts
  *   12. Migration status verification
  */
 
@@ -137,13 +137,6 @@ async function main() {
   }
 
   try {
-    await prisma.adminRateLimit.count();
-    pass("AdminRateLimit table exists");
-  } catch (e) {
-    fail("AdminRateLimit table exists", e.message);
-  }
-
-  try {
     await prisma.adminAuditLog.count();
     pass("AdminAuditLog table exists");
   } catch (e) {
@@ -167,9 +160,6 @@ async function main() {
   // SECTION 3: LOGIN WITH VALID CREDENTIALS
   // ─────────────────────────────────────────────────────────────────
   console.log("\n--- 3. Login With Valid Credentials ---");
-
-  // Clear any rate limits that might block us
-  await prisma.adminRateLimit.deleteMany({}).catch(() => {});
 
   const loginJar = new CookieJar("admin-browser");
   const loginRes = await req("/api/auth/login", {
@@ -350,33 +340,28 @@ async function main() {
   assert(dualMe.status === 200 && dualMe.json?.success, "Admin session + stale POS cookie: /api/auth/me still authenticated");
 
   // ─────────────────────────────────────────────────────────────────
-  // SECTION 12: RATE LIMITING NON-DESTRUCTIVE
+  // SECTION 12: UNTHROTTLED AUTHENTICATION (NO RATE LIMITING)
   // ─────────────────────────────────────────────────────────────────
-  console.log("\n--- 12. Rate Limiting ---");
+  console.log("\n--- 12. Unthrottled Authentication ---");
 
-  // Clear rate limits and try a few bad logins
-  await prisma.adminRateLimit.deleteMany({}).catch(() => {});
-
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 5; i++) {
     await req("/api/auth/login", {
       method: "POST",
-      body: { email: adminEmail, password: "wrong" },
+      body: { email: adminEmail, password: "wrong-password" },
     });
   }
 
-  // After 3 failed attempts, a valid login should still work (threshold is 5)
+  // After multiple failed attempts, valid login succeeds immediately with no throttling
   const validAfterFails = await req("/api/auth/login", {
     method: "POST",
     body: { email: adminEmail, password: adminPassword },
   });
-  assert(validAfterFails.status === 200 && validAfterFails.json?.success, "Valid login succeeds after failed attempts (below threshold)");
+  assert(validAfterFails.status === 200 && validAfterFails.json?.success, "Valid login succeeds immediately without rate-limiting");
 
   console.log(`\n====================================================================`);
   console.log(`ALL ${results.filter(r => r.ok).length} ADMIN AUTHENTICATION CHECKS PASSED!`);
   console.log(`====================================================================\n`);
 
-  // Clean up test sessions
-  await prisma.adminRateLimit.deleteMany({}).catch(() => {});
   await prisma.$disconnect();
 }
 

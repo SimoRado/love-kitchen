@@ -61,16 +61,7 @@ async function main() {
     process.exit(1);
   }
 
-  // 2. Check AdminRateLimit table exists
-  try {
-    await prisma.adminRateLimit.count();
-    console.log("AdminRateLimit table: EXISTS");
-  } catch (err) {
-    console.error("WARNING: AdminRateLimit table missing:", err.message);
-    console.error("Run: npx prisma migrate deploy");
-  }
-
-  // 3. Find existing admin
+  // 2. Find existing admin
   const existing = await prisma.adminUser.findFirst();
 
   if (!existing) {

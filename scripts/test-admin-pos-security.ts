@@ -1,6 +1,5 @@
 import { prisma } from "../src/lib/prisma";
 import { hashPassword, verifyPassword } from "../src/lib/password";
-import { checkRateLimit, resetRateLimit } from "../src/lib/rateLimit";
 import { recordAuditLog } from "../src/lib/auditLog";
 import { createOtp, verifyOtp } from "../src/lib/otp";
 import { getOrCreateDefaultAdmin, validateAdminAccessPath } from "../src/lib/adminAccount";
@@ -33,21 +32,7 @@ async function runAllTests() {
     assert(await verifyPassword(testPass, hashed), "Password verified accurately");
     assert(!(await verifyPassword("WrongPass", hashed)), "Invalid password correctly rejected");
 
-
-    // 2. Distributed Database Rate Limiting
-    console.log("\n--- 2. Testing Distributed Rate Limiting ---");
-    const rateLimitKey = "test_ip:192.168.1.100:ADMIN_LOGIN_FAIL";
-    await resetRateLimit(rateLimitKey);
-    for (let i = 0; i < 5; i++) {
-      const status = await checkRateLimit(rateLimitKey, 5, 10);
-      assert(status.allowed, `Rate limit attempt ${i + 1}/5 allowed`);
-    }
-    const blockedStatus = await checkRateLimit(rateLimitKey, 5, 10);
-    assert(!blockedStatus.allowed, "6th attempt successfully blocked by distributed rate limiter");
-    await resetRateLimit(rateLimitKey);
-
-
-    // 3. Admin Account Bootstrap & Lookup
+    // 2. Admin Account Bootstrap & Lookup
     console.log("\n--- 3. Testing Admin Account Bootstrap & Lookup ---");
     const admin = await getOrCreateDefaultAdmin();
     assert(admin && admin.email,  `Default admin created/loaded: ${admin.email}`);

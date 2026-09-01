@@ -29,7 +29,6 @@ function fail(msg) {
 }
 
 async function loginAdmin() {
-  await prisma.adminRateLimit.deleteMany({}).catch(() => {});
   const adminPassword = loadEnvValue("ADMIN_PASSWORD") || process.env.ADMIN_PASSWORD || "123";
   const res = await fetch(`${BASE_URL}/api/auth/login`, {
     method: "POST",
