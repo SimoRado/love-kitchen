@@ -671,11 +671,11 @@ export default function CheckoutPage() {
                 </div>
 
                 <div className="flex justify-between text-slate-600">
-                  <span>Delivery ({orderType === "DELIVERY" ? "Standard" : "Pickup"})</span>
+                  <span>{orderType === "DELIVERY" ? "Delivery" : "Pickup"}</span>
                   <span className="font-bold text-slate-900">
                     {orderType === "DELIVERY"
                       ? formatCurrency(deliveryFee, currency)
-                      : "Free (0.00)"}
+                      : formatCurrency(0, currency)}
                   </span>
                 </div>
 
