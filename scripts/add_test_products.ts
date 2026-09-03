@@ -253,9 +253,10 @@ const productsToSeed: ProductData[] = [
 async function main() {
   console.log("🚀 Starting product image optimization and database seeding...");
 
-  const uploadDir = path.join(projectRoot, "public", "uploads", "products");
-  if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
+  const OUTPUT_DIR = path.join(process.cwd(), "public", "images", "products");
+  const WEB_PATH_PREFIX = "/images/products";
+  if (!fs.existsSync(OUTPUT_DIR)) {
+    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   }
 
   // 1. Ensure categories exist
@@ -309,8 +310,8 @@ async function main() {
     }
 
     const destFileName = `${item.slug}.webp`;
-    const destFilePath = path.join(uploadDir, destFileName);
-    const publicImageUrl = `/uploads/products/${destFileName}`;
+    const destFilePath = path.join(OUTPUT_DIR, destFileName);
+    const publicImageUrl = `${WEB_PATH_PREFIX}/${destFileName}`;
 
     // Optimize image with Sharp (1200x750 16:10 aspect ratio, WebP quality 82)
     try {
