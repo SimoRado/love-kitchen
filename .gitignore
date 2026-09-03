@@ -60,3 +60,6 @@ prisma/*.db-wal
 .cache/
 .vercel
 .env*
+
+# Raw photo archives
+pics/
