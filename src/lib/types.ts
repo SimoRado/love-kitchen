@@ -190,4 +190,5 @@ export interface DeviceRegistrationCode {
   replaceDeviceId?: string | null;
   deviceName: string;
   deviceType: DeviceType;
+  isReconnect?: boolean;
 }

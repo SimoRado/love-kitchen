@@ -60,6 +60,7 @@ export default function DevicesPage() {
 
   // Countdown timer for active invitation
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [generatingCodeDeviceId, setGeneratingCodeDeviceId] = useState<string | null>(null);
 
   const loadDevices = useCallback(async () => {
     try {
@@ -163,6 +164,38 @@ export default function DevicesPage() {
       showToast("Network error creating invitation.", "error");
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const handleGetLoginCode = async (device: Device) => {
+    setGeneratingCodeDeviceId(device.id);
+    try {
+      const res = await fetch("/api/devices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          replaceDeviceId: device.id,
+          isReconnect: true,
+          name: device.name,
+          type: device.type,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success && data.data) {
+        setActiveInvitation(data.data);
+        showToast(`Login code for "${device.name}" generated! Valid for 10 minutes.`, "success");
+        loadDevices();
+        if (typeof window !== "undefined") {
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }
+      } else {
+        showToast(data.error || "Could not generate login code.", "error");
+      }
+    } catch {
+      showToast("Network error generating login code.", "error");
+    } finally {
+      setGeneratingCodeDeviceId(null);
     }
   };
 
@@ -311,15 +344,26 @@ export default function DevicesPage() {
           <div className="max-w-3xl space-y-4">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-100 border border-orange-200 text-orange-800 text-xs font-black uppercase tracking-wider">
               <KeyRound className="w-3.5 h-3.5" />
-              <span>Temporary POS Registration Code</span>
+              <span>
+                {activeInvitation.isReconnect
+                  ? "Temporary POS Login Code"
+                  : activeInvitation.replaceDeviceId
+                  ? "Device Replacement Code"
+                  : "Temporary POS Registration Code"}
+              </span>
             </div>
 
             <div>
               <h2 className="text-xl sm:text-2xl font-black text-slate-900">
-                Register Device: <span className="text-orange-600">{activeInvitation.deviceName}</span>
+                {activeInvitation.isReconnect
+                  ? "Log In Device: "
+                  : activeInvitation.replaceDeviceId
+                  ? "Replace Device: "
+                  : "Register Device: "}
+                <span className="text-orange-600">{activeInvitation.deviceName}</span>
               </h2>
               <p className="text-xs sm:text-sm text-slate-600 mt-1">
-                Enter this 10-minute temporary pairing code on the iPad POS registration screen (<span className="font-mono font-bold text-slate-800">/admin/pos</span>).
+                Enter this 10-minute temporary pairing code on the iPad POS screen (<span className="font-mono font-bold text-slate-800">/admin/pos</span>) to connect as this device.
               </p>
             </div>
 
@@ -496,19 +540,37 @@ export default function DevicesPage() {
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100">
-                    {/* 1. Rename */}
+                  <div className="space-y-2 pt-1 border-t border-slate-100">
+                    {/* Primary: Get Login Code */}
                     <button
                       type="button"
-                      onClick={() => {
-                        setEditingDevice(device);
-                        setEditName(device.name);
-                      }}
-                      className="h-10 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-extrabold text-xs inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      onClick={() => handleGetLoginCode(device)}
+                      disabled={generatingCodeDeviceId === device.id}
+                      className="w-full h-11 rounded-xl bg-orange-600 hover:bg-orange-700 active:bg-orange-800 disabled:opacity-50 text-white font-extrabold text-xs inline-flex items-center justify-center gap-2 shadow-xs transition-all active:scale-[0.98] cursor-pointer"
+                      title="Generate a 10-minute temporary code to log into this iPad register"
                     >
-                      <Edit3 className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Rename</span>
+                      {generatingCodeDeviceId === device.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <KeyRound className="w-4 h-4 stroke-[2.5]" />
+                      )}
+                      <span>Get Login Code</span>
                     </button>
+
+                    {/* Secondary Grid */}
+                    <div className="grid grid-cols-2 gap-2">
+                      {/* 1. Rename */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingDevice(device);
+                          setEditName(device.name);
+                        }}
+                        className="h-10 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-extrabold text-xs inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Rename</span>
+                      </button>
 
                     {/* 2. Disable / Activate Toggle */}
                     {!isRevoked ? (
@@ -574,6 +636,7 @@ export default function DevicesPage() {
                         <span>Revoke</span>
                       </button>
                     ) : null}
+                    </div>
                   </div>
                 </article>
               );

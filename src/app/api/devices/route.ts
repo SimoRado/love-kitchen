@@ -67,17 +67,31 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const name = typeof body.name === "string" && body.name.trim() ? body.name.trim().slice(0, 80) : "Restaurant iPad";
-    const type = typeof body.type === "string" ? body.type.toUpperCase() : "POS";
+    const isReconnect = body.isReconnect === true || body.reconnect === true || body.action === "login";
     const replaceDeviceId = typeof body.replaceDeviceId === "string" ? body.replaceDeviceId : null;
+    let name = typeof body.name === "string" && body.name.trim() ? body.name.trim().slice(0, 80) : "Restaurant iPad";
+    let type = typeof body.type === "string" ? body.type.toUpperCase() : "POS";
+
+    if (replaceDeviceId) {
+      const existing = await prisma.device.findUnique({ where: { id: replaceDeviceId } });
+      if (!existing) {
+        return NextResponse.json({ success: false, error: "Device was not found." }, { status: 404 });
+      }
+      if (isReconnect) {
+        name = existing.name;
+        type = existing.type;
+      }
+    }
 
     if (!VALID_DEVICE_TYPES.has(type)) {
       return NextResponse.json({ success: false, error: "Invalid device type." }, { status: 400 });
     }
 
     if (replaceDeviceId) {
-      const existing = await prisma.device.findUnique({ where: { id: replaceDeviceId } });
-      if (!existing) return NextResponse.json({ success: false, error: "Device to replace was not found." }, { status: 404 });
+      await prisma.deviceRegistrationCode.updateMany({
+        where: { replaceDeviceId, usedAt: null },
+        data: { usedAt: new Date() },
+      });
     }
 
     const code = generateRegistrationCode();
@@ -89,7 +103,7 @@ export async function POST(request: NextRequest) {
         codeHash,
         deviceName: name,
         deviceType: type,
-        restaurantId: "default",
+        restaurantId: isReconnect ? "reconnect" : "default",
         replaceDeviceId,
         expiresAt,
       },
@@ -104,6 +118,7 @@ export async function POST(request: NextRequest) {
         replaceDeviceId,
         deviceName: registration.deviceName,
         deviceType: registration.deviceType,
+        isReconnect,
       },
     }, { status: 201 });
   } catch (error) {

@@ -31,7 +31,39 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Invalid device type." }, { status: 400 });
     }
 
+    const isReconnect = Boolean(registration.replaceDeviceId && registration.restaurantId === "reconnect");
+
     const result = await prisma.$transaction(async (tx) => {
+      // 1. Reconnect existing registered device
+      if (isReconnect && registration.replaceDeviceId) {
+        const existingDevice = await tx.device.findUnique({
+          where: { id: registration.replaceDeviceId },
+        });
+
+        if (!existingDevice) {
+          throw new Error("Device to connect was not found.");
+        }
+
+        const finalCookie = await createDeviceCredentialCookie(existingDevice.id);
+        const updatedDevice = await tx.device.update({
+          where: { id: existingDevice.id },
+          data: {
+            credentialHash: finalCookie.credentialHash,
+            status: "ACTIVE",
+            revokedAt: null,
+            lastSeenAt: new Date(),
+          },
+        });
+
+        await tx.deviceRegistrationCode.update({
+          where: { id: registration.id },
+          data: { usedAt: new Date() },
+        });
+
+        return { device: updatedDevice, cookieValue: finalCookie.cookieValue };
+      }
+
+      // 2. Standard device registration with optional replacement
       if (registration.replaceDeviceId) {
         await tx.device.updateMany({
           where: { id: registration.replaceDeviceId },
@@ -46,7 +78,7 @@ export async function POST(request: NextRequest) {
           name: registration.deviceName,
           type: registration.deviceType,
           status: "ACTIVE",
-          restaurantId: registration.restaurantId,
+          restaurantId: registration.restaurantId === "reconnect" ? "default" : registration.restaurantId,
           credentialHash: initialCookie.credentialHash,
           lastSeenAt: new Date(),
         },
@@ -60,7 +92,7 @@ export async function POST(request: NextRequest) {
       return { device: updatedDevice, cookieValue: finalCookie.cookieValue };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
-    if (registration.replaceDeviceId) {
+    if (registration.replaceDeviceId && !isReconnect) {
       publishOrderEvent({ type: "device-revoked", deviceId: registration.replaceDeviceId });
     }
 
