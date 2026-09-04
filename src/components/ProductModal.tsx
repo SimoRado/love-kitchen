@@ -5,6 +5,7 @@ import { X, Upload, Loader2, Check } from "lucide-react";
 import { Product, Category } from "@/lib/types";
 import { useToast } from "./ToastContext";
 import { adminFetch } from "@/lib/adminFetch";
+import { getEffectiveProductPrice, calculateDiscountSavings, hasActiveDiscount } from "@/lib/money";
 
 interface ProductModalProps {
   isOpen: boolean;
@@ -29,6 +30,7 @@ export default function ProductModal({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
+  const [discountPercent, setDiscountPercent] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [image, setImage] = useState("");
   const [available, setAvailable] = useState(true);
@@ -49,6 +51,11 @@ export default function ProductModal({
         setName(product.name);
         setDescription(product.description || "");
         setPrice(product.price.toString());
+        setDiscountPercent(
+          product.discountPercent && product.discountPercent > 0
+            ? String(product.discountPercent)
+            : ""
+        );
         setCategoryId(product.categoryId);
         setImage(product.image || "");
         setAvailable(product.available);
@@ -58,6 +65,7 @@ export default function ProductModal({
         setName("");
         setDescription("");
         setPrice("");
+        setDiscountPercent("");
         setCategoryId(defaultCategoryId || (categories.length > 0 ? categories[0].id : ""));
         setImage("");
         setAvailable(true);
@@ -84,6 +92,13 @@ export default function ProductModal({
       newErrors.price = "Valid price is required.";
     } else if (numPrice < 0) {
       newErrors.price = "Price must be 0 or greater.";
+    }
+
+    if (discountPercent.trim() !== "") {
+      const numDiscount = Number(discountPercent);
+      if (!Number.isInteger(numDiscount) || numDiscount < 0 || numDiscount > 100) {
+        newErrors.discountPercent = "Discount must be an integer between 0% and 100%.";
+      }
     }
 
     const numPrepTime = parseInt(prepTimeMinutes, 10);
@@ -205,6 +220,7 @@ export default function ProductModal({
         name: name.trim(),
         description: description.trim() || null,
         price: parseFloat(price),
+        discountPercent: discountPercent.trim() ? parseInt(discountPercent, 10) : 0,
         categoryId,
         image: image.trim() || null,
         available,
@@ -292,8 +308,8 @@ export default function ProductModal({
             )}
           </div>
 
-          {/* Category & Price Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Category, Price & Discount Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {/* Category */}
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-text-muted mb-1.5">
@@ -344,7 +360,70 @@ export default function ProductModal({
                 <p className="text-xs text-red-500 mt-1">{errors.price}</p>
               )}
             </div>
+
+            {/* Discount (%) */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-text-muted mb-1.5">
+                Discount (%) <span className="text-text-muted font-normal lowercase">(optional)</span>
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="1"
+                  min="0"
+                  max="100"
+                  value={discountPercent}
+                  onChange={(e) => setDiscountPercent(e.target.value)}
+                  placeholder="0"
+                  className={`w-full px-3.5 py-2.5 rounded-lg border text-sm bg-surface transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 pr-8 ${
+                    errors.discountPercent
+                      ? "border-red-400 focus:border-red-500"
+                      : "border-border focus:border-primary"
+                  }`}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-text-muted pointer-events-none">
+                  %
+                </span>
+              </div>
+              {errors.discountPercent && (
+                <p className="text-xs text-red-500 mt-1">{errors.discountPercent}</p>
+              )}
+            </div>
           </div>
+
+          {/* Pricing Preview Banner */}
+          {price.trim() !== "" && !isNaN(parseFloat(price)) && parseFloat(price) >= 0 && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-bold text-text-muted uppercase tracking-wider text-[10px]">
+                  Price Preview:
+                </span>
+                {hasActiveDiscount(discountPercent ? parseInt(discountPercent, 10) : 0) ? (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="line-through text-slate-400 font-medium">
+                      {parseFloat(price).toFixed(2)} MAD
+                    </span>
+                    <span className="text-slate-400 font-bold">→</span>
+                    <span className="font-extrabold text-emerald-700 text-sm">
+                      {getEffectiveProductPrice(parseFloat(price), parseInt(discountPercent, 10)).toFixed(2)} MAD
+                    </span>
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-200">
+                      -{parseInt(discountPercent, 10)}%
+                    </span>
+                  </div>
+                ) : (
+                  <span className="font-bold text-slate-800">
+                    {parseFloat(price).toFixed(2)} MAD <span className="font-normal text-text-muted text-[11px]">(No discount active)</span>
+                  </span>
+                )}
+              </div>
+              {hasActiveDiscount(discountPercent ? parseInt(discountPercent, 10) : 0) && (
+                <span className="text-[11px] font-semibold text-emerald-700">
+                  Customer saves {calculateDiscountSavings(parseFloat(price), parseInt(discountPercent, 10)).toFixed(2)} MAD
+                </span>
+              )}
+            </div>
+          )}
 
           {/* Preparation Time & Kitchen Station */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

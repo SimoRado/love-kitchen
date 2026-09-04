@@ -3,11 +3,11 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { ShoppingBag, Plus, Minus, Trash2, AlertTriangle, Edit2 } from "lucide-react";
-import { useCartStore } from "@/store/useCartStore";
+import { useCartStore, calculateConfiguredPrice } from "@/store/useCartStore";
 import { formatCurrency } from "@/lib/formatters";
 import { CartItem, SelectedModifierOptionSnapshot } from "@/lib/types";
 import ProductConfigModal from "./ProductConfigModal";
-import { calculateItemTotal } from "@/lib/money";
+import { calculateItemTotal, hasActiveDiscount } from "@/lib/money";
 
 interface CartSidebarProps {
   currency?: string;
@@ -110,9 +110,23 @@ export default function CartSidebar({
                       >
                         {product.name}
                       </p>
-                      <p className="text-[11px] text-slate-500 font-normal mt-0.5">
-                        {formatCurrency(configuredUnitPrice, currency)} each
-                      </p>
+                      {hasActiveDiscount(product.discountPercent) ? (
+                        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                          <span className="text-[11px] font-bold text-[#C8102E]">
+                            {formatCurrency(configuredUnitPrice, currency)} each
+                          </span>
+                          <span className="text-[10px] text-slate-400 line-through">
+                            {formatCurrency(calculateConfiguredPrice(product.price, selectedModifiers), currency)}
+                          </span>
+                          <span className="bg-[#C8102E] text-white text-[9px] font-black px-1.5 py-0.2 rounded">
+                            -{product.discountPercent}%
+                          </span>
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-slate-500 font-normal mt-0.5">
+                          {formatCurrency(configuredUnitPrice, currency)} each
+                        </p>
+                      )}
                     </div>
 
                     <span className="text-xs font-bold text-slate-900 shrink-0">

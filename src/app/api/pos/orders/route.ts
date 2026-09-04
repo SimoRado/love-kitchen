@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requirePosAccess } from "@/lib/deviceAuth";
-import { calculateOrderTotals, roundMoney } from "@/lib/money";
+import { calculateOrderTotals, roundMoney, getEffectiveProductPrice } from "@/lib/money";
 import { publishOrderEvent } from "@/lib/orderEvents";
 import { printOrder } from "@/lib/printingService";
 import { calculateOrderPreparationEstimate } from "@/lib/prepTimeEstimator";
@@ -156,7 +156,7 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        const basePrice = roundMoney(product.price);
+        const basePrice = getEffectiveProductPrice(product.price, product.discountPercent);
         const configuredUnitPrice = roundMoney(basePrice + modifierTotal);
 
         createItems.push({

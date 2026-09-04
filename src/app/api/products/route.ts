@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { name, description, price, image, available, categoryId, prepTimeMinutes, prepStation } = body;
+    const { name, description, price, discountPercent, image, available, categoryId, prepTimeMinutes, prepStation } = body;
 
     if (!name || typeof name !== "string" || name.trim() === "") {
       return NextResponse.json(
@@ -89,6 +89,18 @@ export async function POST(request: NextRequest) {
         { success: false, error: "Price must be a valid number greater than or equal to 0" },
         { status: 400 }
       );
+    }
+
+    let parsedDiscountPercent = 0;
+    if (discountPercent !== undefined && discountPercent !== null && discountPercent !== "") {
+      const numDiscount = Number(discountPercent);
+      if (!Number.isInteger(numDiscount) || numDiscount < 0 || numDiscount > 100) {
+        return NextResponse.json(
+          { success: false, error: "Discount percentage must be an integer between 0 and 100" },
+          { status: 400 }
+        );
+      }
+      parsedDiscountPercent = numDiscount;
     }
 
     const parsedPrepTime = prepTimeMinutes !== undefined && prepTimeMinutes !== null
@@ -136,6 +148,7 @@ export async function POST(request: NextRequest) {
         name: name.trim(),
         description: description ? description.trim() : null,
         price: roundMoney(numericPrice),
+        discountPercent: parsedDiscountPercent,
         image: typeof image === "string" && image.trim() ? image.trim() : null,
         available: available !== undefined ? Boolean(available) : true,
         prepTimeMinutes: parsedPrepTime,

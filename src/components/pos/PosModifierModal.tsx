@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { X, Check, AlertCircle, Plus, Minus } from "lucide-react";
 import { Product, SelectedModifierOptionSnapshot } from "@/lib/types";
 import { formatCurrency, formatModifierSelectionRule } from "@/lib/formatters";
-import { roundMoney } from "@/lib/money";
+import { roundMoney, getEffectiveProductPrice, hasActiveDiscount } from "@/lib/money";
 import { getProductActiveModifierGroups } from "@/lib/constants";
 
 interface PosModifierModalProps {
@@ -59,7 +59,7 @@ export default function PosModifierModal({
 
   const calculatedUnitPrice = useMemo(() => {
     if (!product) return 0;
-    let total = product.price;
+    let total = getEffectiveProductPrice(product.price, product.discountPercent);
     selectedMap.forEach((sel) => {
       total = roundMoney(total + (Number(sel.priceDelta) || 0));
     });
@@ -175,9 +175,23 @@ export default function PosModifierModal({
             <h3 className="text-xl font-extrabold text-slate-900 leading-tight">
               {product.name}
             </h3>
-            <p className="text-xs font-bold text-orange-600 mt-0.5">
-              Base Price: {formatCurrency(product.price, currency)}
-            </p>
+            {hasActiveDiscount(product.discountPercent) ? (
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="text-xs font-bold text-orange-600">
+                  Base Price: {formatCurrency(getEffectiveProductPrice(product.price, product.discountPercent), currency)}
+                </span>
+                <span className="text-[11px] text-slate-400 line-through">
+                  {formatCurrency(product.price, currency)}
+                </span>
+                <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-black bg-orange-600 text-white">
+                  -{product.discountPercent}%
+                </span>
+              </div>
+            ) : (
+              <p className="text-xs font-bold text-orange-600 mt-0.5">
+                Base Price: {formatCurrency(product.price, currency)}
+              </p>
+            )}
           </div>
 
           <button

@@ -50,7 +50,7 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { name, description, price, image, available, categoryId, prepTimeMinutes, prepStation } = body;
+    const { name, description, price, discountPercent, image, available, categoryId, prepTimeMinutes, prepStation } = body;
 
     const existingProduct = await prisma.product.findUnique({
       where: { id },
@@ -76,6 +76,22 @@ export async function PUT(
         { success: false, error: "Price must be a valid number greater than or equal to 0" },
         { status: 400 }
       );
+    }
+
+    let parsedDiscountPercent = existingProduct.discountPercent ?? 0;
+    if (discountPercent !== undefined) {
+      if (discountPercent === null || discountPercent === "" || discountPercent === 0) {
+        parsedDiscountPercent = 0;
+      } else {
+        const numDiscount = Number(discountPercent);
+        if (!Number.isInteger(numDiscount) || numDiscount < 0 || numDiscount > 100) {
+          return NextResponse.json(
+            { success: false, error: "Discount percentage must be an integer between 0 and 100" },
+            { status: 400 }
+          );
+        }
+        parsedDiscountPercent = numDiscount;
+      }
     }
 
     const parsedPrepTime = prepTimeMinutes !== undefined && prepTimeMinutes !== null
@@ -123,6 +139,7 @@ export async function PUT(
         name: name.trim(),
         description: description ? description.trim() : null,
         price: roundMoney(numericPrice),
+        discountPercent: parsedDiscountPercent,
         image: image !== undefined ? (image ? image.trim() : null) : existingProduct.image,
         available: available !== undefined ? Boolean(available) : existingProduct.available,
         prepTimeMinutes: parsedPrepTime,

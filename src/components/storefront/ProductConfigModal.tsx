@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { X, Plus, Minus, Check, AlertCircle, UtensilsCrossed } from "lucide-react";
 import { Product, SelectedModifierOptionSnapshot } from "@/lib/types";
 import { formatCurrency, formatModifierSelectionRule } from "@/lib/formatters";
-import { roundMoney } from "@/lib/money";
+import { roundMoney, getEffectiveProductPrice, hasActiveDiscount } from "@/lib/money";
 import { useBodyScrollLock } from "@/lib/useBodyScrollLock";
 import { getProductActiveModifierGroups } from "@/lib/constants";
 
@@ -189,7 +189,8 @@ export default function ProductConfigModal({
     (sum, m) => sum + (Number(m.priceDelta) || 0),
     0
   );
-  const unitPriceCalculated = roundMoney(product.price + modifiersDeltaSum);
+  const effectiveBasePrice = getEffectiveProductPrice(product.price, product.discountPercent);
+  const unitPriceCalculated = roundMoney(effectiveBasePrice + modifiersDeltaSum);
   const safeQuantity = Math.max(1, Math.floor(quantity) || 1);
   const totalCalculated = roundMoney(unitPriceCalculated * safeQuantity);
 
@@ -341,9 +342,23 @@ export default function ProductConfigModal({
                 <h3 id="product-config-title" className="font-bold text-base sm:text-lg text-slate-900 leading-snug truncate">
                   {product.name}
                 </h3>
-                <p className="text-xs font-bold text-[#C8102E] mt-0.5">
-                  Base: {formatCurrency(product.price, currency)}
-                </p>
+                {hasActiveDiscount(product.discountPercent) ? (
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="text-xs font-bold text-[#C8102E]">
+                      Base: {formatCurrency(getEffectiveProductPrice(product.price, product.discountPercent), currency)}
+                    </span>
+                    <span className="text-[11px] text-slate-400 line-through">
+                      {formatCurrency(product.price, currency)}
+                    </span>
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-black bg-[#C8102E] text-white">
+                      -{product.discountPercent}%
+                    </span>
+                  </div>
+                ) : (
+                  <p className="text-xs font-bold text-[#C8102E] mt-0.5">
+                    Base: {formatCurrency(product.price, currency)}
+                  </p>
+                )}
               </div>
             </div>
 

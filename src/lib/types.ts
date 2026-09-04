@@ -42,6 +42,7 @@ export interface Product {
   name: string;
   description: string | null;
   price: number;
+  discountPercent?: number | null;
   image: string | null;
   available: boolean;
   prepTimeMinutes?: number;

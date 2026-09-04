@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { Product, CartItem, OrderType, SelectedModifierOptionSnapshot } from "@/lib/types";
-import { roundMoney, calculateItemTotal } from "@/lib/money";
+import { roundMoney, calculateItemTotal, getEffectiveProductPrice } from "@/lib/money";
 
 interface CustomerInfo {
   customerName: string;
@@ -89,7 +89,8 @@ export const useCartStore = create<CartState>()(
           a.optionId.localeCompare(b.optionId)
         );
         const itemId = generateCartItemId(product.id, sortedModifiers);
-        const configuredUnitPrice = calculateConfiguredPrice(product.price, sortedModifiers);
+        const effectiveBase = getEffectiveProductPrice(product.price, product.discountPercent);
+        const configuredUnitPrice = calculateConfiguredPrice(effectiveBase, sortedModifiers);
         const validQuantity = Math.max(1, Math.floor(Number(quantity)) || 1);
 
         const currentItems = get().items;
@@ -155,7 +156,8 @@ export const useCartStore = create<CartState>()(
           a.optionId.localeCompare(b.optionId)
         );
         const newId = generateCartItemId(itemToUpdate.product.id, sortedModifiers);
-        const newUnitPrice = calculateConfiguredPrice(itemToUpdate.product.price, sortedModifiers);
+        const effectiveBase = getEffectiveProductPrice(itemToUpdate.product.price, itemToUpdate.product.discountPercent);
+        const newUnitPrice = calculateConfiguredPrice(effectiveBase, sortedModifiers);
         const targetQuantity =
           newQuantity !== undefined
             ? Math.max(1, Math.floor(Number(newQuantity)) || 1)
@@ -278,8 +280,9 @@ export const useCartStore = create<CartState>()(
               }
             }
 
+            const effectiveBase = getEffectiveProductPrice(dbProduct.price, dbProduct.discountPercent);
             const latestConfiguredPrice = calculateConfiguredPrice(
-              dbProduct.price,
+              effectiveBase,
               refreshedModifiers
             );
 

@@ -20,6 +20,7 @@ import { Product, Category } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import { useToast } from "@/components/ToastContext";
 import { adminFetch } from "@/lib/adminFetch";
+import { getEffectiveProductPrice, hasActiveDiscount } from "@/lib/money";
 
 export default function ProductsPage() {
   const { showToast } = useToast();
@@ -378,7 +379,23 @@ export default function ProductsPage() {
 
                       {/* Price */}
                       <td className="py-3.5 px-5 font-bold text-sm text-text-main">
-                        {formatCurrency(product.price, "MAD")}
+                        {hasActiveDiscount(product.discountPercent) ? (
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-emerald-700 font-extrabold">
+                                {formatCurrency(getEffectiveProductPrice(product.price, product.discountPercent), "MAD")}
+                              </span>
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                -{product.discountPercent}%
+                              </span>
+                            </div>
+                            <span className="text-xs text-text-muted line-through font-normal">
+                              {formatCurrency(product.price, "MAD")}
+                            </span>
+                          </div>
+                        ) : (
+                          formatCurrency(product.price, "MAD")
+                        )}
                       </td>
 
                       {/* Availability Toggle Switch */}

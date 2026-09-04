@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdminAuth } from "@/lib/auth";
 import { checkRestaurantOpen } from "@/lib/openingHoursHelper";
-import { calculateOrderTotals, roundMoney } from "@/lib/money";
+import { calculateOrderTotals, roundMoney, getEffectiveProductPrice } from "@/lib/money";
 import { publishOrderEvent } from "@/lib/orderEvents";
 import { calculateOrderPreparationEstimate } from "@/lib/prepTimeEstimator";
 
@@ -230,7 +230,7 @@ export async function POST(request: NextRequest) {
               if (count > group.maxSelections) throw new OrderRequestError(`You can select at most ${group.maxSelections} option(s) for "${group.name}" on "${product.name}".`);
             }
 
-            const basePrice = roundMoney(product.price);
+            const basePrice = getEffectiveProductPrice(product.price, product.discountPercent);
             const configuredUnitPrice = roundMoney(basePrice + modifierTotal);
             if (configuredUnitPrice < 0) throw new OrderRequestError(`Invalid configured price for "${product.name}".`, 409);
             createItems.push({

@@ -42,3 +42,42 @@ export function calculateOrderTotals(
     total,
   };
 }
+
+/**
+ * Checks whether a product has an active discount.
+ * Active if discountPercent is a finite number strictly greater than 0 and up to 100.
+ */
+export function hasActiveDiscount(discountPercent?: number | null): boolean {
+  if (discountPercent === null || discountPercent === undefined) {
+    return false;
+  }
+  const pct = Number(discountPercent);
+  return Number.isFinite(pct) && pct > 0 && pct <= 100;
+}
+
+/**
+ * Calculates the effective unit price of a product, accounting for any active discount.
+ * Original base price is returned when no discount is active.
+ * Precision-safe via roundMoney.
+ */
+export function getEffectiveProductPrice(price: number, discountPercent?: number | null): number {
+  const basePrice = roundMoney(price);
+  if (!hasActiveDiscount(discountPercent)) {
+    return basePrice;
+  }
+  const pct = Math.floor(Number(discountPercent));
+  if (pct >= 100) {
+    return 0;
+  }
+  return roundMoney(basePrice * (1 - pct / 100));
+}
+
+/**
+ * Calculates the monetary discount savings (original - effective).
+ */
+export function calculateDiscountSavings(price: number, discountPercent?: number | null): number {
+  const basePrice = roundMoney(price);
+  const effectivePrice = getEffectiveProductPrice(price, discountPercent);
+  return roundMoney(Math.max(0, basePrice - effectivePrice));
+}
+

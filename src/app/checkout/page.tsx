@@ -17,11 +17,11 @@ import {
   AlertTriangle,
   Clock,
 } from "lucide-react";
-import { useCartStore } from "@/store/useCartStore";
+import { useCartStore, calculateConfiguredPrice } from "@/store/useCartStore";
 import { RestaurantSettings } from "@/lib/types";
 import { checkRestaurantOpen, RestaurantOpenStatus } from "@/lib/openingHoursHelper";
 import { formatCurrency, formatTime } from "@/lib/formatters";
-import { calculateOrderTotals } from "@/lib/money";
+import { calculateOrderTotals, hasActiveDiscount } from "@/lib/money";
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -620,9 +620,23 @@ export default function CheckoutPage() {
                         <span className="font-semibold text-slate-800">
                           {quantity}× {product.name}
                         </span>
-                        <span className="block text-[11px] text-slate-500 font-normal">
-                          {formatCurrency(configuredUnitPrice, currency)} each
-                        </span>
+                        {hasActiveDiscount(product.discountPercent) ? (
+                          <span className="flex items-center gap-1.5 text-[11px] mt-0.5 flex-wrap">
+                            <span className="font-bold text-[#C8102E]">
+                              {formatCurrency(configuredUnitPrice, currency)} each
+                            </span>
+                            <span className="text-[10px] text-slate-400 line-through">
+                              {formatCurrency(calculateConfiguredPrice(product.price, selectedModifiers), currency)}
+                            </span>
+                            <span className="bg-[#C8102E] text-white text-[9px] font-black px-1.5 py-0.2 rounded">
+                              -{product.discountPercent}%
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="block text-[11px] text-slate-500 font-normal">
+                            {formatCurrency(configuredUnitPrice, currency)} each
+                          </span>
+                        )}
 
                         {selectedModifiers.length > 0 && (
                           <div className="mt-1 space-y-0.5 text-[11px] text-slate-600 bg-[#FAF7F0] p-2 rounded-lg border border-[#EFE8DC]">

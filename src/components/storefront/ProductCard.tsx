@@ -6,6 +6,7 @@ import { Product, SelectedModifierOptionSnapshot } from "@/lib/types";
 import { formatCurrency } from "@/lib/formatters";
 import { useCartStore } from "@/store/useCartStore";
 import { hasActiveModifiers } from "@/lib/constants";
+import { getEffectiveProductPrice, hasActiveDiscount } from "@/lib/money";
 import ProductConfigModal from "./ProductConfigModal";
 
 interface ProductCardProps {
@@ -98,6 +99,11 @@ export default function ProductCard({
 
             {/* Badges Overlay */}
             <div className="absolute top-2 right-2 sm:top-2.5 sm:right-2.5 flex flex-col gap-1 items-end">
+              {hasActiveDiscount(product.discountPercent) && (
+                <div className="bg-[#C8102E] text-white text-[10px] sm:text-[11px] font-black px-2 py-0.5 rounded-md shadow-xs flex items-center gap-1">
+                  <span>-{product.discountPercent}%</span>
+                </div>
+              )}
               {!isAvailable && (
                 <div className="bg-slate-900/80 text-white text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md shadow-xs">
                   Sold Out
@@ -129,9 +135,20 @@ export default function ProductCard({
         {/* Card Footer: Price & Add to Order */}
         <div className="p-3.5 sm:p-4 pt-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 mt-1 border-t border-slate-100 pt-3">
           <div className="flex flex-col">
-            <span className="text-sm sm:text-base font-bold text-slate-900 tracking-tight whitespace-nowrap">
-              {formatCurrency(product.price, currency)}
-            </span>
+            {hasActiveDiscount(product.discountPercent) ? (
+              <div className="flex items-baseline gap-1.5 flex-wrap">
+                <span className="text-sm sm:text-base font-extrabold text-[#C8102E] tracking-tight whitespace-nowrap">
+                  {formatCurrency(getEffectiveProductPrice(product.price, product.discountPercent), currency)}
+                </span>
+                <span className="text-xs sm:text-xs font-medium text-slate-400 line-through whitespace-nowrap">
+                  {formatCurrency(product.price, currency)}
+                </span>
+              </div>
+            ) : (
+              <span className="text-sm sm:text-base font-bold text-slate-900 tracking-tight whitespace-nowrap">
+                {formatCurrency(product.price, currency)}
+              </span>
+            )}
           </div>
 
           {/* Add to Order Button */}

@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { Category, Product, CartItem, SelectedModifierOptionSnapshot, OrderType } from "@/lib/types";
 import { formatCurrency } from "@/lib/formatters";
-import { calculateOrderTotals, calculateItemTotal } from "@/lib/money";
+import { calculateOrderTotals, calculateItemTotal, getEffectiveProductPrice, hasActiveDiscount } from "@/lib/money";
 import { hasActiveModifiers } from "@/lib/constants";
 import { generateCartItemId, calculateConfiguredPrice } from "@/store/useCartStore";
 import PosModifierModal from "./PosModifierModal";
@@ -122,7 +122,7 @@ export default function PosManualOrderView({
       setModalInitialQuantity(1);
     } else {
       const itemId = generateCartItemId(product.id, []);
-      const configuredUnitPrice = product.price;
+      const configuredUnitPrice = getEffectiveProductPrice(product.price, product.discountPercent);
 
       setCartItems((prev) => {
         const existingIndex = prev.findIndex((it) => it.id === itemId);
@@ -159,7 +159,8 @@ export default function PosManualOrderView({
       a.optionId.localeCompare(b.optionId)
     );
     const itemId = generateCartItemId(configuringProduct.id, sortedModifiers);
-    const configuredUnitPrice = calculateConfiguredPrice(configuringProduct.price, sortedModifiers);
+    const effectiveBase = getEffectiveProductPrice(configuringProduct.price, configuringProduct.discountPercent);
+    const configuredUnitPrice = calculateConfiguredPrice(effectiveBase, sortedModifiers);
 
     setCartItems((prev) => {
       if (editingCartItemId) {
@@ -422,9 +423,22 @@ export default function PosManualOrderView({
                       </h4>
 
                       <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex items-center justify-between gap-1">
-                        <span className="text-xs sm:text-sm font-black text-slate-950 font-mono">
-                          {formatCurrency(product.price, currency)}
-                        </span>
+                        <div className="flex items-baseline gap-1">
+                          {hasActiveDiscount(product.discountPercent) ? (
+                            <>
+                              <span className="text-xs sm:text-sm font-black text-orange-600 font-mono">
+                                {formatCurrency(getEffectiveProductPrice(product.price, product.discountPercent), currency)}
+                              </span>
+                              <span className="text-[10px] text-slate-400 line-through font-mono">
+                                {formatCurrency(product.price, currency)}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-xs sm:text-sm font-black text-slate-950 font-mono">
+                              {formatCurrency(product.price, currency)}
+                            </span>
+                          )}
+                        </div>
                         <span
                           className={`text-[9px] sm:text-[10px] font-black px-1.5 py-0.5 rounded-md transition-colors shrink-0 uppercase tracking-wider ${
                             hasOptions
@@ -550,10 +564,15 @@ export default function PosManualOrderView({
                 >
                   <div className="flex items-start justify-between gap-1.5">
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 flex-wrap">
                         <span className="font-extrabold text-xs text-slate-900 leading-snug">
                           {item.product.name}
                         </span>
+                        {hasActiveDiscount(item.product.discountPercent) && (
+                          <span className="text-[9px] font-black text-orange-600 bg-orange-50 px-1 py-0.2 rounded border border-orange-200">
+                            -{item.product.discountPercent}%
+                          </span>
+                        )}
                         {hasOptions && (
                           <button
                             type="button"
