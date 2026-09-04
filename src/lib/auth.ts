@@ -69,7 +69,9 @@ export async function verifyAdminSessionToken(
 
   const sessionId = token.slice(0, dotIndex);
   const secret = token.slice(dotIndex + 1);
-  if (!sessionId || !secret) return null;
+  if (!sessionId || !secret || secret.length !== 64 || !/^[0-9a-f]{64}$/i.test(secret)) {
+    return null;
+  }
 
   try {
     const session = await prisma.adminSession.findUnique({

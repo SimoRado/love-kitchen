@@ -53,15 +53,22 @@ export interface Product {
   updatedAt: string | Date;
 }
 
-export type OrderStatus =
-  | "PENDING"
-  | "CONFIRMED"
-  | "PREPARING"
-  | "READY"
-  | "COMPLETED"
-  | "CANCELLED";
+export const ORDER_STATUSES = [
+  "PENDING",
+  "CONFIRMED",
+  "PREPARING",
+  "READY",
+  "COMPLETED",
+  "CANCELLED",
+] as const;
 
-export type OrderType = "DELIVERY" | "PICKUP";
+export type OrderStatus = (typeof ORDER_STATUSES)[number];
+
+export const ORDER_TYPES = ["DELIVERY", "PICKUP"] as const;
+
+export type OrderType = (typeof ORDER_TYPES)[number];
+
+export type PosTab = "register" | "new-order" | "history";
 
 export interface OrderItemModifier {
   id: string;

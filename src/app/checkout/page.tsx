@@ -224,7 +224,7 @@ export default function CheckoutPage() {
       setIsSubmitting(true);
 
       if (!idempotencyKey.current) {
-        idempotencyKey.current = `web-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        idempotencyKey.current = `web-${crypto.randomUUID()}`;
       }
 
       // Map cart items into the robust order submission payload
@@ -287,6 +287,7 @@ export default function CheckoutPage() {
         err instanceof Error ? err.message : "An unexpected error occurred. Please try again."
       );
       submissionLock.current = false;
+      idempotencyKey.current = null;
     } finally {
       setIsSubmitting(false);
     }

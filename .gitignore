@@ -45,6 +45,8 @@ desktop.ini
 .idea/
 
 # Prisma SQLite local database
+*.db
+dev.db
 prisma/*.db
 prisma/*.db-journal
 prisma/*.db-shm

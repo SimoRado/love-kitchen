@@ -31,6 +31,7 @@ interface OrderDetailsModalProps {
   currency?: string;
   onClose: () => void;
   onStatusUpdated: (updatedOrder: Order) => void;
+  apiPathPrefix?: string;
 }
 
 const STATUS_FLOW: OrderStatus[] = [
@@ -47,6 +48,7 @@ export default function OrderDetailsModal({
   currency = "MAD",
   onClose,
   onStatusUpdated,
+  apiPathPrefix = "/api/orders",
 }: OrderDetailsModalProps) {
   const { showToast } = useToast();
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
@@ -90,7 +92,7 @@ export default function OrderDetailsModal({
 
     try {
       setIsUpdatingStatus(true);
-      const res = await fetch(`/api/orders/${order.id}`, {
+      const res = await fetch(`${apiPathPrefix}/${order.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),

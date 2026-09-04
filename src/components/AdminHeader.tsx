@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Menu, Loader2, Sparkles, LogOut } from "lucide-react";
 import { useToast } from "./ToastContext";
 
@@ -18,7 +17,6 @@ export default function AdminHeader({
   onOpenSidebar,
   onDataRefresh,
 }: AdminHeaderProps) {
-  const router = useRouter();
   const { showToast } = useToast();
   const [isSeeding, setIsSeeding] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);

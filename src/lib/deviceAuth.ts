@@ -10,8 +10,8 @@ export const DEVICE_STATUSES = ["ACTIVE", "INACTIVE", "DISABLED", "REVOKED"] as 
 export type DeviceType = (typeof DEVICE_TYPES)[number];
 export type DeviceStatus = (typeof DEVICE_STATUSES)[number];
 
-const POS_ALLOWED_ADMIN_ROLES = new Set(["OWNER", "ADMIN", "MANAGER", "STAFF"]);
-const DEVICE_MANAGEMENT_ROLES = new Set(["OWNER", "ADMIN"]);
+export const POS_ALLOWED_ADMIN_ROLES = new Set(["OWNER", "ADMIN", "MANAGER", "STAFF"]);
+export const DEVICE_MANAGEMENT_ROLES = new Set(["OWNER", "ADMIN"]);
 
 function toHex(buffer: ArrayBuffer): string {
   return Array.from(new Uint8Array(buffer))
@@ -83,7 +83,9 @@ export async function getDeviceFromRequest(request: NextRequest): Promise<Device
 
   const deviceId = cookie.slice(0, separatorIndex);
   const credential = cookie.slice(separatorIndex + 1);
-  if (!deviceId || !credential) return null;
+  if (!deviceId || !credential || credential.length !== 64 || !/^[0-9a-f]{64}$/i.test(credential)) {
+    return null;
+  }
 
   const device = await prisma.device.findUnique({ where: { id: deviceId } });
   if (!device || device.status !== "ACTIVE") return null;
@@ -91,7 +93,7 @@ export async function getDeviceFromRequest(request: NextRequest): Promise<Device
   const receivedHash = await hashDeviceCredential(credential);
   if (!timingSafeStringEqual(receivedHash, device.credentialHash)) return null;
 
-  await prisma.device.update({ where: { id: device.id }, data: { lastSeenAt: new Date() } });
+  await prisma.device.update({ where: { id: device.id }, data: { lastSeenAt: new Date() } }).catch(() => {});
   return device;
 }
 

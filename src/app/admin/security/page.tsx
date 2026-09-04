@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   ShieldCheck,
   Lock,
@@ -66,13 +66,8 @@ export default function AdminSecurityPage() {
   const [revokingSessions, setRevokingSessions] = useState(false);
   const [sessionsMsg, setSessionsMsg] = useState("");
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
-      setLoading(true);
       const [profileRes, sessionsRes] = await Promise.all([
         adminFetch("/api/auth/me"),
         adminFetch("/api/admin/account/sessions"),
@@ -93,7 +88,12 @@ export default function AdminSecurityPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load remote admin security data after mount
+    void fetchData();
+  }, [fetchData]);
 
   const handleEmailChange = async (e: React.FormEvent) => {
     e.preventDefault();

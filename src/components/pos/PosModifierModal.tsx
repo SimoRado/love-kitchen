@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { X, Check, AlertCircle, Plus, Minus } from "lucide-react";
 import { Product, SelectedModifierOptionSnapshot } from "@/lib/types";
-import { formatCurrency } from "@/lib/formatters";
+import { formatCurrency, formatModifierSelectionRule } from "@/lib/formatters";
 import { roundMoney } from "@/lib/money";
 import { getProductActiveModifierGroups } from "@/lib/constants";
 
@@ -16,15 +16,6 @@ interface PosModifierModalProps {
   isEditing?: boolean;
   onClose: () => void;
   onConfirm: (selectedModifiers: SelectedModifierOptionSnapshot[], quantity: number) => void;
-}
-
-function formatSelectionRule(min: number, max: number, required: boolean): string {
-  const effectiveMin = required ? Math.max(1, min) : min;
-  if (effectiveMin === 0 && max === 1) return "Optional (up to 1)";
-  if (effectiveMin === 1 && max === 1) return "Choose 1";
-  if (effectiveMin === max) return `Choose exactly ${max}`;
-  if (effectiveMin === 0) return `Choose up to ${max}`;
-  return `Choose ${effectiveMin}–${max}`;
 }
 
 export default function PosModifierModal({
@@ -212,7 +203,7 @@ export default function PosModifierModal({
             const isGroupRequired =
               group.required || (group.minSelections !== undefined && group.minSelections > 0);
 
-            const ruleText = formatSelectionRule(
+            const ruleText = formatModifierSelectionRule(
               group.minSelections ?? 0,
               group.maxSelections ?? 1,
               Boolean(group.required)

@@ -59,9 +59,28 @@ export async function getOrCreateDefaultAdmin(): Promise<AdminUser> {
   if (existing) return existing;
 
   const email = (process.env.ADMIN_EMAIL || "admin@lovekitchen.ma").trim().toLowerCase();
-  const password = process.env.ADMIN_PASSWORD || "RestaurantAdmin2026!";
+  const isProduction = process.env.NODE_ENV === "production";
+  const password = process.env.ADMIN_PASSWORD;
+  if (isProduction) {
+    if (!password) {
+      throw new Error(
+        "ADMIN_PASSWORD environment variable must be configured in production to initialize the administrator account."
+      );
+    }
+    if (password === "RestaurantAdmin2026!" || password === "123" || password.length < 8) {
+      throw new Error(
+        "Production security violation: ADMIN_PASSWORD must be a strong secret password with at least 8 characters and cannot use default/trivial values."
+      );
+    }
+  }
+
+  const effectivePassword = password || "RestaurantAdmin2026!";
   const adminAccessPath = (process.env.ADMIN_ACCESS_PATH || DEFAULT_ADMIN_ACCESS_PATH).trim().toLowerCase();
-  const passwordHash = await hashPassword(password);
+  const pathValidation = validateAccessPath(adminAccessPath);
+  if (!pathValidation.valid) {
+    throw new Error(`Invalid ADMIN_ACCESS_PATH configured: ${pathValidation.error}`);
+  }
+  const passwordHash = await hashPassword(effectivePassword);
 
   return prisma.adminUser.create({
     data: {

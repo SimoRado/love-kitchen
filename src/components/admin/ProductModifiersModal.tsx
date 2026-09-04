@@ -18,6 +18,7 @@ import { formatCurrency } from "@/lib/formatters";
 import { useToast } from "../ToastContext";
 import ConfirmDialog from "../ConfirmDialog";
 import { roundMoney } from "@/lib/money";
+import { adminFetch } from "@/lib/adminFetch";
 
 interface ProductModifiersModalProps {
   isOpen: boolean;
@@ -71,7 +72,7 @@ export default function ProductModifiersModal({
     if (!product) return;
     try {
       setIsLoading(true);
-      const res = await fetch(`/api/products/${product.id}/modifiers`);
+      const res = await adminFetch(`/api/products/${product.id}/modifiers`);
       const data = await res.json();
       if (data.success) {
         setGroups(data.data || []);
@@ -160,7 +161,7 @@ export default function ProductModifiersModal({
       if (editingGroupId) {
         // Update existing group
         const targetGroup = groups.find((g) => g.id === editingGroupId);
-        const res = await fetch(`/api/products/${product.id}/modifiers`, {
+        const res = await adminFetch(`/api/products/${product.id}/modifiers`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -186,7 +187,7 @@ export default function ProductModifiersModal({
         }
       } else {
         // Create new group
-        const res = await fetch(`/api/products/${product.id}/modifiers`, {
+        const res = await adminFetch(`/api/products/${product.id}/modifiers`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -219,7 +220,7 @@ export default function ProductModifiersModal({
 
   const handleToggleGroupActive = async (group: ProductModifierGroup) => {
     try {
-      const res = await fetch(`/api/products/${product.id}/modifiers`, {
+      const res = await adminFetch(`/api/products/${product.id}/modifiers`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -248,7 +249,7 @@ export default function ProductModifiersModal({
     if (!deleteGroupTarget) return;
     try {
       setIsDeleting(true);
-      const res = await fetch(
+      const res = await adminFetch(
         `/api/products/${product.id}/modifiers?groupId=${deleteGroupTarget.id}`,
         { method: "DELETE" }
       );
@@ -292,7 +293,7 @@ export default function ProductModifiersModal({
         },
       ];
 
-      const res = await fetch(`/api/products/${product.id}/modifiers`, {
+      const res = await adminFetch(`/api/products/${product.id}/modifiers`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -328,7 +329,7 @@ export default function ProductModifiersModal({
         o.id === option.id ? { ...o, active: !o.active } : o
       );
 
-      const res = await fetch(`/api/products/${product.id}/modifiers`, {
+      const res = await adminFetch(`/api/products/${product.id}/modifiers`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -376,7 +377,7 @@ export default function ProductModifiersModal({
           : o
       );
 
-      const res = await fetch(`/api/products/${product.id}/modifiers`, {
+      const res = await adminFetch(`/api/products/${product.id}/modifiers`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -403,7 +404,7 @@ export default function ProductModifiersModal({
     if (!deleteOptionTarget) return;
     try {
       setIsDeleting(true);
-      const res = await fetch(
+      const res = await adminFetch(
         `/api/products/${product.id}/modifiers?optionId=${deleteOptionTarget.id}`,
         { method: "DELETE" }
       );

@@ -41,7 +41,6 @@ export default function DevicesPage() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [invitations, setInvitations] = useState<DeviceRegistrationCode[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isGenerating, setIsGenerating] = useState(false);
 
   // Invitation creation modal
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);

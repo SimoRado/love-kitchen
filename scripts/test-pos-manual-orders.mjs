@@ -115,7 +115,6 @@ async function main() {
     const codeData = await makeRegistrationCode(adminJar, "Verification iPad Terminal");
     const posJar = new Jar("pos-terminal");
     await registerDevice(posJar, codeData.code);
-    await adminLogin(posJar, adminPassword);
 
     // 3. Test POS Manual Order Creation (POST /api/pos/orders) - Simple Item
     const simpleOrderPayload = {

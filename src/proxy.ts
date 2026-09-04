@@ -45,6 +45,55 @@ export async function proxy(request: NextRequest) {
   //    - Pass through.
   // ───────────────────────────────────────────────────────────────────────
 
+  // 0. API Route Protection (Centralized CSRF / Origin Verification)
+  if (pathname.startsWith("/api/")) {
+    const isStateChanging = ["POST", "PUT", "PATCH", "DELETE"].includes(request.method);
+    if (isStateChanging) {
+      const host = (
+        request.headers.get("x-forwarded-host") ||
+        request.headers.get("host") ||
+        request.nextUrl.host
+      ).toLowerCase();
+
+      const origin = request.headers.get("origin");
+      if (origin) {
+        try {
+          const originHost = new URL(origin).host.toLowerCase();
+          if (originHost !== host) {
+            return NextResponse.json(
+              { success: false, error: "Cross-origin request forbidden." },
+              { status: 403 }
+            );
+          }
+        } catch {
+          return NextResponse.json(
+            { success: false, error: "Invalid request origin." },
+            { status: 400 }
+          );
+        }
+      } else {
+        const referer = request.headers.get("referer");
+        if (referer) {
+          try {
+            const refererHost = new URL(referer).host.toLowerCase();
+            if (refererHost !== host) {
+              return NextResponse.json(
+                { success: false, error: "Cross-origin request forbidden." },
+                { status: 403 }
+              );
+            }
+          } catch {
+            return NextResponse.json(
+              { success: false, error: "Invalid request referer." },
+              { status: 400 }
+            );
+          }
+        }
+      }
+    }
+    return NextResponse.next();
+  }
+
   // 1. POS routes: Always accessible directly at /admin/pos
   if (pathname === "/admin/pos" || pathname.startsWith("/admin/pos/")) {
     return withNoCache(NextResponse.next());
@@ -84,6 +133,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico|uploads).*)",
+    "/((?!_next/static|_next/image|favicon.ico|uploads).*)",
   ],
 };

@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { X, Loader2, Check } from "lucide-react";
 import { Category } from "@/lib/types";
 import { useToast } from "./ToastContext";
+import { adminFetch } from "@/lib/adminFetch";
 
 interface CategoryModalProps {
   isOpen: boolean;
@@ -66,7 +67,7 @@ export default function CategoryModal({
       const url = isEdit ? `/api/categories/${category?.id}` : "/api/categories";
       const method = isEdit ? "PUT" : "POST";
 
-      const res = await fetch(url, {
+      const res = await adminFetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

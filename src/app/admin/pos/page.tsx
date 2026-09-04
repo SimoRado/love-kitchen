@@ -98,48 +98,69 @@ export default function PosPage() {
     };
   }, [loadDevice, loadCatalog]);
 
-  // Realtime SSE Event Stream
+  // Realtime SSE Event Stream with Resilient Reconnect
   useEffect(() => {
     if (!deviceState?.device || deviceState.device.status !== "ACTIVE") return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- load active orders on authentication
     loadOrders();
 
-    const source = new EventSource("/api/pos/events");
-
-    source.onopen = () => {
-      setIsConnected(true);
-    };
-
-    const handleRefresh = () => {
-      loadOrders();
-    };
-
-    source.addEventListener("order-created", handleRefresh);
-    source.addEventListener("order-updated", handleRefresh);
-    source.addEventListener("order-deleted", handleRefresh);
-    source.addEventListener("device-revoked", () => {
-      loadDevice();
-      setIsConnected(false);
-      source.close();
-    });
-
+    let isMounted = true;
+    let source: EventSource | null = null;
     let retryTimeout: ReturnType<typeof setTimeout> | null = null;
+    let backoffDelay = 3000;
 
-    source.onerror = () => {
-      setIsConnected(false);
-      source.close();
-      if (retryTimeout) clearTimeout(retryTimeout);
-      retryTimeout = setTimeout(() => {
-        if (deviceState?.device && deviceState.device.status === "ACTIVE") {
+    const connectEvents = () => {
+      if (!isMounted) return;
+      try {
+        source = new EventSource("/api/pos/events");
+
+        source.onopen = () => {
+          if (!isMounted) return;
+          setIsConnected(true);
+          backoffDelay = 3000;
+        };
+
+        const handleRefresh = () => {
+          if (!isMounted) return;
           loadOrders();
-        }
-      }, 3000);
+        };
+
+        source.addEventListener("order-created", handleRefresh);
+        source.addEventListener("order-updated", handleRefresh);
+        source.addEventListener("order-deleted", handleRefresh);
+        source.addEventListener("device-revoked", () => {
+          if (!isMounted) return;
+          loadDevice();
+          setIsConnected(false);
+          source?.close();
+        });
+
+        source.onerror = () => {
+          if (!isMounted) return;
+          setIsConnected(false);
+          source?.close();
+          source = null;
+          if (retryTimeout) clearTimeout(retryTimeout);
+          retryTimeout = setTimeout(() => {
+            if (isMounted && deviceState?.device && deviceState.device.status === "ACTIVE") {
+              loadOrders();
+              connectEvents();
+            }
+          }, backoffDelay);
+          backoffDelay = Math.min(backoffDelay * 1.5, 15000);
+        };
+      } catch (err) {
+        console.warn("POS SSE connection setup error:", err);
+      }
     };
+
+    connectEvents();
 
     return () => {
+      isMounted = false;
       if (retryTimeout) clearTimeout(retryTimeout);
       setIsConnected(false);
-      source.close();
+      source?.close();
     };
   }, [deviceState?.device, loadOrders, loadDevice]);
 
@@ -468,6 +489,7 @@ export default function PosPage() {
         isOpen={Boolean(selectedOrderForModal)}
         order={selectedOrderForModal}
         currency={currency}
+        apiPathPrefix="/api/pos/orders"
         onClose={() => setSelectedOrderForModal(null)}
         onStatusUpdated={handleModalStatusUpdated}
       />

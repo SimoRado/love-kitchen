@@ -182,11 +182,16 @@ export async function createSignedProductUploadUrl(
 /**
  * Saves a raw uploaded file in local development storage.
  */
+export const RAW_PATH_REGEX = /^raw\/[0-9a-zA-Z_-]{8,64}\.(jpg|jpeg|png|webp|avif|heic|heif|gif)$/i;
+
 export async function saveLocalRawFile(rawPath: string, buffer: Buffer): Promise<void> {
-  if (!rawPath || typeof rawPath !== "string" || !rawPath.startsWith("raw/") || rawPath.includes("..")) {
+  if (!rawPath || typeof rawPath !== "string" || !RAW_PATH_REGEX.test(rawPath)) {
     throw new Error("Invalid raw storage path");
   }
-  const fullPath = path.join(LOCAL_STORAGE_DIR, rawPath);
+  const fullPath = path.resolve(LOCAL_STORAGE_DIR, rawPath);
+  if (!fullPath.startsWith(path.resolve(LOCAL_STORAGE_DIR))) {
+    throw new Error("Invalid raw storage path");
+  }
   ensureLocalDir(path.dirname(fullPath));
   fs.writeFileSync(fullPath, buffer);
 }
@@ -199,9 +204,9 @@ export async function saveLocalRawFile(rawPath: string, buffer: Buffer): Promise
 export async function processRawProductImage(
   rawPath: string
 ): Promise<{ url: string; filename: string }> {
-  // Prevent path traversal
-  if (!rawPath || typeof rawPath !== "string" || !rawPath.startsWith("raw/") || rawPath.includes("..")) {
-    throw new Error("Invalid raw storage path");
+  // Prevent path traversal and malicious filenames
+  if (!rawPath || typeof rawPath !== "string" || !RAW_PATH_REGEX.test(rawPath)) {
+    throw new Error("Invalid raw storage path format.");
   }
 
   const supabase = getSupabaseStorageClient();
@@ -330,6 +335,8 @@ export async function uploadProductImage(
   _file: File,
   _customPrefix?: string
 ): Promise<{ url: string; filename: string }> {
+  void _file;
+  void _customPrefix;
   throw new Error(
     "Direct function upload is deprecated and disabled. Use the canonical signed upload pipeline (/api/upload/sign -> direct storage -> /api/upload/process)."
   );
@@ -364,7 +371,11 @@ export async function deleteProductImage(url: string | null | undefined): Promis
 
     if (url.startsWith("/uploads/products/") || url.includes("/uploads/products/")) {
       const relativePart = url.startsWith("/uploads/") ? url.replace("/uploads/", "") : url;
-      const localFile = path.join(LOCAL_STORAGE_DIR, relativePart);
+      const resolvedBase = path.resolve(LOCAL_STORAGE_DIR);
+      const localFile = path.resolve(LOCAL_STORAGE_DIR, relativePart);
+      if (!localFile.startsWith(resolvedBase)) {
+        return;
+      }
       if (fs.existsSync(localFile)) {
         fs.unlinkSync(localFile);
       }

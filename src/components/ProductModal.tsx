@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { X, Upload, Loader2, Check } from "lucide-react";
 import { Product, Category } from "@/lib/types";
 import { useToast } from "./ToastContext";
+import { adminFetch } from "@/lib/adminFetch";
 
 interface ProductModalProps {
   isOpen: boolean;
@@ -130,7 +131,7 @@ export default function ProductModal({
       // Stage 1: Request short-lived signed upload URL (Admin Auth Required)
       setUploadStatus("uploading");
 
-      const signRes = await fetch("/api/upload/sign", {
+      const signRes = await adminFetch("/api/upload/sign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -167,7 +168,7 @@ export default function ProductModal({
       // Stage 3: Request server-side Sharp optimization (auto EXIF rotate + 1200x750 WebP q80)
       setUploadStatus("optimizing");
 
-      const processRes = await fetch("/api/upload/process", {
+      const processRes = await adminFetch("/api/upload/process", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rawPath }),
@@ -214,7 +215,7 @@ export default function ProductModal({
       const url = isEdit ? `/api/products/${product?.id}` : "/api/products";
       const method = isEdit ? "PUT" : "POST";
 
-      const res = await fetch(url, {
+      const res = await adminFetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

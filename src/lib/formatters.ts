@@ -133,3 +133,20 @@ export function getOrderTypeConfig(type: OrderType | string) {
       return { label: type, bgClass: "bg-gray-50 text-gray-700 border-gray-200" };
   }
 }
+
+/**
+ * Formats user-facing selection constraints for modifier groups.
+ */
+export function formatModifierSelectionRule(
+  min: number,
+  max: number,
+  required: boolean
+): string {
+  const effectiveMin = required ? Math.max(1, min) : min;
+  if (effectiveMin === 0 && max === 1) return "Optional (up to 1)";
+  if (effectiveMin === 1 && max === 1) return "Choose 1";
+  if (effectiveMin === max) return `Choose exactly ${max}`;
+  if (effectiveMin === 0) return `Choose up to ${max}`;
+  return `Choose ${effectiveMin}–${max}`;
+}
+
