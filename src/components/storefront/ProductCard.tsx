@@ -83,7 +83,7 @@ export default function ProductCard({
               <img
                 src={product.image}
                 alt={product.name}
-                className={`w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02] ${
+                className={`w-full h-full object-cover ${
                   !isAvailable ? "grayscale opacity-60" : ""
                 }`}
                 onError={(e) => {

@@ -189,7 +189,7 @@ export default function CartDrawer({
         />
 
         {/* Slide-out Panel Container */}
-        <div className="fixed inset-y-0 right-0 max-w-full flex pl-6 sm:pl-10 h-full max-h-[100dvh] h-[100dvh] pointer-events-none">
+        <div className="fixed inset-y-0 right-0 max-w-full flex pl-6 sm:pl-10 h-full max-h-[100dvh] h-[100dvh] pointer-events-none overflow-hidden">
           <div
             role="dialog"
             aria-modal="true"

@@ -12,6 +12,8 @@ import CartDrawer from "@/components/storefront/CartDrawer";
 import StoreFooter from "@/components/storefront/StoreFooter";
 import WhatsAppFloatingButton from "@/components/storefront/WhatsAppFloatingButton";
 import ProductConfigModal from "@/components/storefront/ProductConfigModal";
+import PromoSection from "@/components/storefront/PromoSection";
+import DeliveryCTA from "@/components/storefront/DeliveryCTA";
 import { Product, Category, RestaurantSettings, SelectedModifierOptionSnapshot } from "@/lib/types";
 import { checkRestaurantOpen, RestaurantOpenStatus } from "@/lib/openingHoursHelper";
 import { useCartStore } from "@/store/useCartStore";
@@ -126,7 +128,7 @@ export default function StorefrontPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FAF7F0] text-slate-900 flex flex-col antialiased">
+    <div className="min-h-screen bg-[#FAF7F0] text-slate-900 flex flex-col antialiased w-full max-w-full overflow-x-clip">
       {/* 1. Navbar */}
       <StoreNavbar
         restaurantName={settings?.name || "Love Kitchen"}
@@ -136,21 +138,27 @@ export default function StorefrontPage() {
         onOpenCart={() => setIsCartDrawerOpen(true)}
       />
 
-      {/* 2. Hero Section */}
-      <StoreHero />
+      {/* Hero & Restaurant Info Bar (Unified Dark Area) */}
+      <div className="bg-[#111111] relative w-full overflow-hidden">
+        {/* 2. Hero Section */}
+        <StoreHero />
 
-      {/* 3. Restaurant Information & Live Status Banner */}
-      <StoreStatusBanner settings={settings} openStatus={openStatus} />
+        {/* 3. Restaurant Information & Live Status Banner */}
+        <StoreStatusBanner settings={settings} openStatus={openStatus} />
+      </div>
 
-      {/* 4. Sticky Category Tabs */}
+      {/* 4. Unified Alternating Promotional Sections (Asia & America) */}
+      <PromoSection />
+
+      {/* 5. Explore Our Menu (Circular Categories) */}
       <CategoryNav
         categories={categories}
         activeCategoryId={activeCategoryId}
         onSelectCategory={setActiveCategoryId}
       />
 
-      {/* 5. Main Content: 70% Menu / 30% Sticky Cart Layout */}
-      <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+      {/* 6. Main Content: 70% Menu / 30% Sticky Cart Layout */}
+      <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8 w-full">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
           {/* Left Column: Menu Items Grid (70% on desktop) */}
           <div className="lg:col-span-8 space-y-8">
@@ -174,13 +182,16 @@ export default function StorefrontPage() {
         </div>
       </main>
 
-      {/* 6. Mobile Bottom Floating Cart Bar */}
+      {/* 7. Delivery CTA Banner */}
+      <DeliveryCTA />
+
+      {/* 8. Mobile Bottom Floating Cart Bar */}
       <MobileCartBar
         currency={currency}
         onOpenCart={() => setIsCartDrawerOpen(true)}
       />
 
-      {/* 7. Slide-Out Cart Drawer */}
+      {/* 9. Slide-Out Cart Drawer */}
       <CartDrawer
         isOpen={isCartDrawerOpen}
         currency={currency}
@@ -188,10 +199,10 @@ export default function StorefrontPage() {
         onClose={() => setIsCartDrawerOpen(false)}
       />
 
-      {/* 8. WhatsApp Floating Button */}
+      {/* 10. WhatsApp Floating Button */}
       <WhatsAppFloatingButton whatsappNumber={settings?.whatsappNumber} />
 
-      {/* 9. Global Product Configuration Modal */}
+      {/* 11. Global Product Configuration Modal */}
       {configuringProduct && (
         <ProductConfigModal
           isOpen={Boolean(configuringProduct)}
@@ -202,7 +213,7 @@ export default function StorefrontPage() {
         />
       )}
 
-      {/* 10. Footer */}
+      {/* 12. Minimal Warm Cream Footer */}
       <StoreFooter settings={settings} />
     </div>
   );

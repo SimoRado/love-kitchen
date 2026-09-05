@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans, Playfair_Display } from "next/font/google";
 import "./globals.css";
 
@@ -21,6 +21,12 @@ export const metadata: Metadata = {
   description: "Fresh handcrafted burgers, artisanal pizzas, savory sides, and house desserts.",
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
+
 export default function RootLayout({
   children,
 }: {
@@ -29,9 +35,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${jakartaSans.variable} ${playfairDisplay.variable} h-full antialiased`}
+      className={`${jakartaSans.variable} ${playfairDisplay.variable} h-full antialiased overflow-x-clip`}
     >
-      <body className="min-h-full flex flex-col font-sans">{children}</body>
+      <body className="min-h-full flex flex-col font-sans w-full max-w-full overflow-x-clip">{children}</body>
     </html>
   );
 }

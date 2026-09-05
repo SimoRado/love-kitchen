@@ -28,7 +28,7 @@ export default function MobileCartBar({
       <button
         onClick={onOpenCart}
         aria-label={`View order tray with ${itemCount} items for ${formatCurrency(subtotal, currency)}`}
-        className="w-full bg-[#C8102E] hover:bg-[#B00D26] text-white py-3.5 px-5 rounded-2xl shadow-lg flex items-center justify-between font-bold text-sm transition-all active:scale-98 cursor-pointer focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none"
+        className="w-full bg-[#C8102E] hover:bg-[#B00D26] text-white py-3.5 px-5 rounded-2xl shadow-lg flex items-center justify-between font-bold text-sm transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none"
       >
         <div className="flex items-center gap-2.5">
           <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-xs font-bold">
